@@ -1,0 +1,58 @@
+name: Poll fuel prices
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run poller
+        env:
+          TANKILLE_EMAIL: ${{ secrets.TANKILLE_EMAIL }}
+          TANKILLE_PASSWORD: ${{ secrets.TANKILLE_PASSWORD }}
+        run: python poller.py
+      - name: Export dashboard data
+        run: python export.py
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tankille.db site/data
+          git diff --cached --quiet || git commit -m "[bot] poll"
+          git push
+
+  # Pushes made with GITHUB_TOKEN do not trigger other workflows, so the Pages
+  # deploy for bot commits happens here rather than relying on pages.yml.
+  deploy:
+    needs: poll
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main  # pick up the commit the poll job just pushed
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

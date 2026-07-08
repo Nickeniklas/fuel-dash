@@ -1,0 +1,104 @@
+/* Palette per validated reference instance (see repo dataviz notes).
+   Series colors are fixed per fuel: 95=blue, 98=aqua, dsl=yellow. */
+:root {
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.10);
+  --fuel-95: #2a78d6;
+  --fuel-98: #1baf7a;
+  --fuel-dsl: #eda100;
+  --delta-good: #006300;
+  --delta-bad: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.10);
+    --fuel-95: #3987e5;
+    --fuel-98: #199e70;
+    --fuel-dsl: #c98500;
+    --delta-good: #0ca30c;
+    --delta-bad: #d03b3b;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto;
+  max-width: 900px;
+  padding: 1.25rem 1rem 3rem;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+.muted { color: var(--muted); font-size: 0.85rem; }
+
+#tabs { display: flex; gap: 0.5rem; margin: 1rem 0; }
+.tab {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+}
+.tab.active { background: var(--surface); color: var(--ink); border-color: var(--ink-2); }
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.toggle button {
+  padding: 0.35rem 0.8rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+}
+.toggle button.active { background: var(--surface); color: var(--ink); font-weight: 600; }
+
+select {
+  padding: 0.35rem 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  max-width: 100%;
+}
+
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+th, td { padding: 0.45rem 0.6rem; text-align: left; border-bottom: 1px solid var(--grid); }
+th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+tbody tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.station-sub { color: var(--muted); font-size: 0.8rem; }
+.delta-good { color: var(--delta-good); }
+.delta-bad { color: var(--delta-bad); }
+.delta-flat { color: var(--muted); }
+
+.chart-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  height: 420px;
+}
+
+footer { margin-top: 2rem; }

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helsinki fuel prices</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>Helsinki fuel prices</h1>
+  <p id="meta-line" class="muted">loading…</p>
+</header>
+
+<nav id="tabs">
+  <button class="tab active" data-view="current">Current prices</button>
+  <button class="tab" data-view="station">Station history</button>
+  <button class="tab" data-view="median">Area medians</button>
+</nav>
+
+<main>
+  <section id="view-current" class="view">
+    <div class="controls">
+      <div id="fuel-toggle" class="toggle" role="group" aria-label="Fuel">
+        <button data-fuel="95" class="active">95E10</button>
+        <button data-fuel="98">98E5</button>
+        <button data-fuel="dsl">Diesel</button>
+      </div>
+      <span class="muted">sorted cheapest first · color = vs station's own 7-day average</span>
+    </div>
+    <table id="price-table">
+      <thead>
+        <tr><th>#</th><th>Station</th><th class="num">Price €/l</th><th class="num">vs 7-day avg</th><th>Reported</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="view-station" class="view" hidden>
+    <div class="controls">
+      <label for="station-picker" class="muted">Station</label>
+      <select id="station-picker"></select>
+    </div>
+    <div class="chart-box"><canvas id="station-chart"></canvas></div>
+  </section>
+
+  <section id="view-median" class="view" hidden>
+    <p class="muted">Daily median across all tracked stations.</p>
+    <div class="chart-box"><canvas id="median-chart"></canvas></div>
+  </section>
+</main>
+
+<footer class="muted">
+  Data: unofficial Tankille API, polled every 3 h. Prices are crowd-reported — treat as indicative.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
