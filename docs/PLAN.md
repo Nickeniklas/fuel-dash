@@ -84,8 +84,6 @@ GH Pages ── serves site/ ── index.html + Chart.js
 
 ## Open items
 
-- **robots.txt and terms of polttoaine.net not yet checked.** Manual browser check
-  required before the first crawl. If disallowed, project needs a new source, full stop.
 - `ajax.php?act=map` endpoint unverified: one test fetch decides the coord strategy.
 - Exact page list for coverage (Helsinki + PK-Seutu + Kehä I + Kehä III as starting
   set) may grow; it's a config list.

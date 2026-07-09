@@ -6,11 +6,21 @@ update this doc first, then the parser.
 
 ## Pages to crawl (config list)
 
-- City page: `index.php?t=Helsinki` style
-- Regional views: `?t=PK-Seutu` etc.
-- Highway pages: `1-tie`, `4-tie`, `Kehä I`, `Kehä III (E18)`, ...
-- Starting set: Helsinki, PK-Seutu, Kehä I, Kehä III. Dedupe stations across pages
-  by station ID; the same station appears on multiple pages.
+URL scheme is per page type, verified live 2026-07-09 (an earlier draft of this doc,
+derived only from reading Pumperly, assumed `index.php?t=<name>` for everything —
+that's wrong for cities and highways, checked in below):
+
+- **City / highway / ring-road pages: path style**, `https://polttoaine.net/<name>`.
+  Verified: `/Helsinki`, `/1-tie`, `/Keha_%20I` (space in the name must be URL-encoded
+  as `%20` — the site's own option value is literally `Keha_ I`). `?t=<name>` on these
+  returns a blank results page (empty center column, ~21 KB), not an error — a silent
+  failure mode, don't mistake it for "no stations".
+- **Regional "seutu" pages: query style**, `index.php?t=<name>`. Verified: `?t=PK-Seutu`.
+  Path style (`/PK-Seutu`) does not work for these.
+- Starting set: `/Helsinki`, `index.php?t=PK-Seutu`, `/Keha_%20I`, `/Keha_%20III%20(E18)`
+  (untested, same `Keha_ I` pattern expected — verify before adding to the poller
+  config). Dedupe stations across pages by station ID; the same station appears on
+  multiple pages.
 
 ## Row format
 
@@ -20,14 +30,26 @@ update this doc first, then the parser.
   3. 95E10
   4. 98E
   5. Diesel
-- **Key on the td count, not on class.** Regional pages (`?t=PK-Seutu` etc.) omit
-  the `E10` class on `<tr>`, city pages have it.
+- **5-td count is necessary but not sufficient.** Every page also has two non-price
+  rows with 5 tds: the sortable header row (`<tr>` with no class, first td
+  `class="Asema"`) and a daily-average "Keskihinnat:" row (`<tr class="bg1">`, first
+  td `class="Keskihinnat"`, date cell is a bare `&nbsp;`). Both fail to match the
+  `DD.MM.` pattern in td 2 — **require td 2 to match `^\d{2}\.\d{2}\.$` to accept a
+  row as a real price row**, that one check clears both cases.
+- **Key on the td count + date check, not on class.** Regional pages (`?t=PK-Seutu`
+  etc.) omit the `E10` class on `<tr>`, city pages have it — don't rely on it either
+  way.
 - Station ID comes from the map link: `cmd=map&id=XXXX`. This is the canonical ID.
-- ~5–8 % of rows have no map link → **skip** (no ID, can't geocode).
-- 98E cell may carry a `*` V-Power marker, sometimes wrapped in
-  `<span class="E99">` → strip marker and span, keep the number.
-- Empty price cells happen (not every report covers all three fuels) → store NULL,
-  never 0.
+- ~5–8 % of rows have no map link → **skip** (no ID, can't geocode). Verified 2/23
+  (~9 %) on the Helsinki fixture, 3/79 (~4 %) on PK-Seutu — same ballpark.
+- 98E cell may carry a `*` V-Power marker: `<span title="Vpower"><span
+  class="E99">*</span>2.043</span>` → strip both spans and the `*`, keep the number.
+- Empty price cells render as a literal `-`, not empty string → treat both `-` and
+  `""` as NULL, never 0.
+- Page charset is declared `windows-1252` (`Content-Type` header and meta tag both
+  say so) — decode as `cp1252` explicitly, don't trust `requests`' encoding guess
+  (it guesses `latin1`, which happens to agree for Finnish `ä`/`ö`/`å` but isn't
+  guaranteed to for the full cp1252 range).
 
 ## Date resolution
 
