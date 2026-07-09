@@ -1,4 +1,4 @@
-.env
+.env*
 .tankille_tokens.json
 __pycache__/
 venv/
