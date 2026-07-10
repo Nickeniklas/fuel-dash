@@ -12,23 +12,23 @@ Full design: [docs/PLAN.md](docs/PLAN.md) · Scraper contract: [docs/SCRAPER.md]
 
 ## Status
 
-Build order (see `docs/PLAN.md`) is at step 4 of 8: parser, coordinate resolution,
-SQLite schema/upsert, and the poller script (`poll.py`) all exist and are
-unit-tested. `ajax.php?act=map` (the hoped-for bulk coordinate endpoint) doesn't
-work — confirmed dead 2026-07-09, see `docs/SCRAPER.md` — so coords come from one
-request per new station's map page instead. No live poll has been run against the
-real site yet; that's next, manually, before JSON export and the Actions workflow
-get built.
+Build order (see `docs/PLAN.md`) is at step 4 of 8, and the first live poll
+(2026-07-09) succeeded: `fuel.db` holds 76 stations (all with coords) and 224
+price rows across the full 5-day visibility window. `ajax.php?act=map` (the
+hoped-for bulk coordinate endpoint) doesn't work — confirmed dead 2026-07-09,
+see `docs/SCRAPER.md` — so coords come from one request per new station's map
+page instead. Next: JSON export and the GH Actions workflow, then dashboard v1.
 
 ## Local setup
 
 ```
 pip install -r requirements.txt
 python -m unittest discover -s tests -t .
+python poll.py          # live poll: fetches configured pages, upserts fuel.db
 ```
 
 `poll.py` runs the full pipeline (fetch configured pages → parse → upsert into
-`fuel.db` → backfill coords for new stations) but hasn't been run live yet.
+`fuel.db` → backfill coords for new stations) and has been run live successfully.
 `parser.py` exposes `parse_page()` and `fetch_page()`; `db.py` exposes the SQLite
 storage layer; `coords.py` fetches and caches per-station coordinates.
 `probe_coords.py` is a standalone script to re-check the coordinate endpoints

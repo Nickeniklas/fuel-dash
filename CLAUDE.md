@@ -29,10 +29,11 @@ suggest going back to it.
 
 ## Build order
 
-robots.txt check (manual, blocks all crawling) → parser with HTML fixtures →
-coordinate resolution (`ajax.php?act=map` test first) → schema + upsert →
-JSON export → Actions workflow → dashboard v1. v2 (heatmap, fill-now-or-wait
-signal) waits until weeks of data exist.
+robots.txt check (done) → parser with HTML fixtures (done) → coordinate
+resolution (done, per-station map page — `ajax.php?act=map` bulk endpoint is
+dead) → schema + upsert (done) → first live poll (done, 2026-07-09: 76
+stations, 224 prices) → **JSON export → Actions workflow → dashboard v1**
+(next). v2 (heatmap, fill-now-or-wait signal) waits until weeks of data exist.
 
 ## Gotchas
 
@@ -42,3 +43,7 @@ signal) waits until weeks of data exist.
 - Skip rows without a map link (~5–8 %, no station ID)
 - Sanity bounds: price 0.80–4.00 EUR, Finland bbox lat 59.7–70.1, lon 20.5–31.6
 - No backfill is possible: history starts at first poll, 5 days visible at most
+- `ajax.php?act=map` (bulk coord endpoint) is dead — always returns HTTP 200
+  with an empty body, tested every param/method/header combo. Coords come
+  from the per-station map page (`index.php?cmd=map&id=<id>`) instead, one
+  request per new station, cached forever. Detail: `docs/SCRAPER.md`.

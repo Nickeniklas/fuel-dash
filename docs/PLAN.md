@@ -73,7 +73,8 @@ GH Pages ── serves site/ ── index.html + Chart.js
 
 ## Build order
 
-1. Manual robots.txt + terms check on polttoaine.net (open item below, blocks everything)
+1. Manual robots.txt + terms check on polttoaine.net (done, 2026-07-09: `ajax.php`
+   isn't disallowed; nothing else in the crawl path is either)
 2. Parser: fetch one city page, parse rows to dicts, unit-test against saved HTML fixtures
 3. Coordinate resolution: test `ajax.php?act=map`, else map-page parse; `stations` table
 4. SQLite schema + upsert + dedupe
@@ -92,3 +93,7 @@ GH Pages ── serves site/ ── index.html + Chart.js
 - `ajax.php?act=map` tested 2026-07-09: doesn't work (empty body under every param
   combination tried). Coord strategy is the per-station map-page fallback instead.
   Detail in `docs/SCRAPER.md`.
+- First live poll run 2026-07-09: succeeded end to end. `fuel.db` has 76 stations
+  (coords backfilled for all of them) and 224 price rows spanning all 5 dates in
+  the source's visibility window. Build order is at step 4 of 8 (schema + upsert);
+  JSON export and the Actions workflow are next.
