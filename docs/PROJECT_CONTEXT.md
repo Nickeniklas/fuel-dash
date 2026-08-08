@@ -2,28 +2,55 @@ PROJECT CONTEXT — fuel-dash
 Paste-ready summary for the Claude project. Condensed from docs/PLAN.md (replanned
 2026-07-08); if the plan changes, update both.
 
-Status (2026-07-16): parser, coordinate resolution, SQLite schema/upsert, the
+Status (2026-08-08): parser, coordinate resolution, SQLite schema/upsert, the
 poller (poll.py), JSON export (export.py), the GH Actions poll+deploy
 workflow (.github/workflows/poll.yml), and dashboard v1 (site/index.html,
 style.css, app.js) are all built, committed, and live. 52 unit tests pass.
 The cron has fired every ~12 h without a miss since 2026-07-12 — production
-is stable. fuel.db has 89 stations (all geocoded) and 474 price rows across
-dates 2026-07-05 to 2026-07-16 (~11 days of accumulated history). Build
-order is done through step 7 of 8; currently in step 8, letting data
-accumulate toward the "weeks of data" bar for v2. Live at
+is stable. fuel.db has 120 stations (all geocoded) and 476 price rows across
+dates 2026-07-05 to 2026-08-08 (35 days of median history — but see the
+report-volume note below, most rows are still each station's initial batch).
+Build order is done through step 7 of 8; currently in step 8, letting report
+volume (not just wall-clock time) accumulate toward the bar for v2. Live at
 https://nickeniklas.github.io/fuel-dash/. Repo renamed 2026-07-16
 (gas-price-dashboard → helsinki-fuel-dash → fuel-dash) to drop the city
 name from the project's identity ahead of planned international expansion;
 the Helsinki-area scope itself hasn't changed, only the name.
-Dashboard UX pass 2026-07-19 (browser-verified locally, not yet committed):
-clicking a price-table row or a map popup's "View trend" button loads that
-station into the trend chart and scrolls to it, kept in sync with the
-station picker; starred favorites persist in the browser's `localStorage`
-and pin to the top of the price table (with an "outside area" hint if a
-favorite falls outside the 15 km filter) plus quick-switch chips above the
-trend chart; and a live name search filters the price table, with pinned
-favorites always visible. All in `site/app.js` / `index.html` / `style.css`,
-no new dependencies.
+
+Dashboard UX pass 2026-07-19 (committed, commit a1e5e07): clicking a
+price-table row or a map popup's "View trend" button loads that station into
+the trend chart and scrolls to it, kept in sync with the station picker;
+starred favorites persist in the browser's `localStorage` and pin to the top
+of the price table (with an "outside area" hint if a favorite falls outside
+the 15 km filter) plus quick-switch chips above the trend chart; and a live
+name search filters the price table, with pinned favorites always visible.
+
+Table/dropdown UX pass 2026-08-08 (verified in Node against live
+site/data/*.json, not yet committed): price-table headers (Station, Price,
+Reported, vs 7d avg) are click-to-sort, with `aria-sort` and an arrow
+indicator; averaged-delta sort always puts null-average stations last in
+both directions. The station `<select>` now groups stations into
+"frequently reported" / "rarely reported" optgroups by a per-fuel point
+count (`MIN_TREND_POINTS = 3`), repopulates when the fuel changes, and shows
+a note near the trend chart when the selected station is sparse. Staleness
+is now graded instead of a single binary flag: fresh, stale (unchanged 0.5
+dim, `STALE_DAYS = 2`), or abandoned (`SOURCE_WINDOW_DAYS = 5` — a station
+no longer visible on the source at all — stronger dimming plus a marker on
+the date cell). A live measurement drove this: at `STALE_DAYS = 2` about 80%
+of stations were dimmed, but ~59 percentage points of that 80% were actually
+past the 5-day source window entirely, not just briefly stale — so
+`STALE_DAYS` itself was left at 2 and the fix was splitting the two cases
+visually. All in `site/app.js` / `index.html` / `style.css`, no new
+dependencies.
+
+Report-volume reality check (measured 2026-08-08): between 2026-07-16 and
+2026-08-08, station count grew 89 → 120 but price rows barely moved,
+474 → 476. Most of the row count is still each station's initial 5-day
+batch from the poll that first discovered it; ongoing re-reports on
+already-known stations are rare. This is the reason the "weeks of data"
+bar for v2 is about report volume, not elapsed time, and why the station
+picker and staleness UI now treat "reported once, long ago" as materially
+different from "reported recently."
 The project
 Niklas (GitHub: Nickeniklas) is building a personal fuel price tracker for the
 Helsinki area. No service provides long-term price trends or a sorted area-wide
@@ -51,14 +78,18 @@ deploys site/ to GH Pages in the same run. It shares the "pages" concurrency
 group with pages.yml, because GITHUB_TOKEN-authored pushes don't trigger
 other workflows' push triggers — poll.yml has to do its own deploy.
 Dashboard: static HTML + Chart.js + Leaflet in site/, served by GH Pages,
-reading only site/data/*.json. v1 is built and confirmed working in a
-browser: sticky fuel (95/98/dsl) and radius (15 km / all) controls; a
-cheapest-first price table colored vs each station's 7-day average; a dark
-Leaflet map (CartoDB dark tiles) with marker color showing spatial cheapness;
-a per-station trend chart with picker; area median lines for 95/98/dsl.
-Config constants (HELSINKI_CENTER, RADIUS_KM, AVG_WINDOW_DAYS, STALE_DAYS,
-COLOR_EPSILON) live at the top of app.js. v2 (deferred until weeks of data
-exist): day-of-week heatmap, "fill now or wait" signal.
+reading only site/data/*.json. Sticky fuel (95/98/dsl) and radius (15 km /
+all) controls; a price table colored vs each station's 7-day average, with
+click-to-sort headers (Station/Price/Reported/vs 7d avg, null averages
+always last) and starred favorites pinned above a divider; a dark Leaflet
+map (CartoDB dark tiles) with marker color showing spatial cheapness; a
+per-station trend chart with a picker grouped into "frequently reported" /
+"rarely reported" optgroups by per-fuel point count, plus a sparse-station
+note when relevant; area median lines for 95/98/dsl. Config constants
+(HELSINKI_CENTER, RADIUS_KM, AVG_WINDOW_DAYS, STALE_DAYS,
+SOURCE_WINDOW_DAYS, COLOR_EPSILON, MIN_TREND_POINTS) live at the top of
+app.js. v2 (deferred until report volume, not just elapsed time, grows):
+day-of-week heatmap, "fill now or wait" signal.
 
 Key decisions and rules
 

@@ -45,10 +45,18 @@
         <thead>
           <tr>
             <th class="star-col" aria-label="Favorite"></th>
-            <th>Station</th>
-            <th>Price</th>
-            <th>Reported</th>
-            <th>vs 7d avg</th>
+            <th class="sortable" data-sort-key="name" aria-sort="none">
+              <button type="button" class="sort-btn">Station<span class="sort-arrow"></span></button>
+            </th>
+            <th class="sortable" data-sort-key="price" aria-sort="ascending">
+              <button type="button" class="sort-btn">Price<span class="sort-arrow"></span></button>
+            </th>
+            <th class="sortable" data-sort-key="date" aria-sort="none">
+              <button type="button" class="sort-btn">Reported<span class="sort-arrow"></span></button>
+            </th>
+            <th class="sortable" data-sort-key="delta" aria-sort="none">
+              <button type="button" class="sort-btn">vs 7d avg<span class="sort-arrow"></span></button>
+            </th>
           </tr>
         </thead>
         <tbody id="price-table-body"></tbody>
@@ -69,6 +77,7 @@
       <label for="station-select" class="control-label">Station</label>
       <select id="station-select"></select>
     </div>
+    <p id="trend-sparse-note" class="sparse-note" hidden></p>
     <div class="chart-wrap">
       <canvas id="trend-chart"></canvas>
     </div>

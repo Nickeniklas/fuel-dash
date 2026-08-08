@@ -5,7 +5,9 @@ const HELSINKI_CENTER = [60.1699, 24.9384];
 const RADIUS_KM = 15;
 const AVG_WINDOW_DAYS = 7;
 const STALE_DAYS = 2;
+const SOURCE_WINDOW_DAYS = 5;
 const COLOR_EPSILON = 0.005;
+const MIN_TREND_POINTS = 3;
 
 const FUEL_ORDER = ['95', '98', 'dsl'];
 const FUEL_LABELS = { '95': '95E10', '98': '98E', dsl: 'Diesel' };
@@ -41,6 +43,8 @@ const state = {
   favorites: new Set(),
   searchQuery: '',
   selectedStationId: null,
+  sortKey: 'price',
+  sortDir: 'asc',
 };
 
 // ---- Utilities ----
@@ -94,6 +98,54 @@ function computeStationAvg(stationId, fuel) {
   if (pts.length < 2) return null;
   const sum = pts.reduce((s, e) => s + e[fuel], 0);
   return sum / pts.length;
+}
+
+function computeStationPointCount(stationId, fuel) {
+  const hist = state.history[stationId] || [];
+  return hist.filter((e) => e[fuel] != null).length;
+}
+
+function stationStaleness(dateStr) {
+  const diff = daysBefore(state.referenceDate, dateStr);
+  if (diff > SOURCE_WINDOW_DAYS) return 'abandoned';
+  if (diff > STALE_DAYS) return 'stale';
+  return 'fresh';
+}
+
+// ---- Sorting ----
+function sortValue(station, key) {
+  const latest = station.latest[state.fuel];
+  switch (key) {
+    case 'name':
+      return station.name;
+    case 'price':
+      return latest.price;
+    case 'date':
+      return parseISO(latest.date);
+    case 'delta': {
+      const avg = computeStationAvg(station.station_id, state.fuel);
+      return avg == null ? null : latest.price - avg;
+    }
+    default:
+      return null;
+  }
+}
+
+function compareStations(a, b, key, dir) {
+  const va = sortValue(a, key);
+  const vb = sortValue(b, key);
+  // Null averages always sort last, regardless of direction.
+  if (va == null || vb == null) {
+    if (va == null && vb == null) return 0;
+    return va == null ? 1 : -1;
+  }
+  const mul = dir === 'asc' ? 1 : -1;
+  if (typeof va === 'string') return mul * va.localeCompare(vb);
+  return mul * (va - vb);
+}
+
+function sortStations(list) {
+  return list.slice().sort((a, b) => compareStations(a, b, state.sortKey, state.sortDir));
 }
 
 // ---- Favorites ----
@@ -162,27 +214,28 @@ function matchesSearch(station) {
 }
 
 function getPinnedStations() {
-  return state.stations
-    .filter((s) => state.favorites.has(s.station_id) && stationHasFuel(s, state.fuel))
-    .sort((a, b) => a.latest[state.fuel].price - b.latest[state.fuel].price);
+  return sortStations(
+    state.stations.filter((s) => state.favorites.has(s.station_id) && stationHasFuel(s, state.fuel))
+  );
 }
 
 function getMainTableStations() {
-  return baseFilteredStations()
-    .filter((s) => !state.favorites.has(s.station_id) && matchesSearch(s))
-    .sort((a, b) => a.latest[state.fuel].price - b.latest[state.fuel].price);
+  return sortStations(
+    baseFilteredStations().filter((s) => !state.favorites.has(s.station_id) && matchesSearch(s))
+  );
 }
 
 // ---- Table ----
 function createStationRow(station, { outsideArea }) {
   const latest = station.latest[state.fuel];
   const avg = computeStationAvg(station.station_id, state.fuel);
-  const stale = daysBefore(state.referenceDate, latest.date) > STALE_DAYS;
+  const staleness = stationStaleness(latest.date);
   const isFavorite = state.favorites.has(station.station_id);
 
   const tr = document.createElement('tr');
   tr.className = 'station-row';
-  if (stale) tr.classList.add('stale');
+  if (staleness === 'stale') tr.classList.add('stale');
+  else if (staleness === 'abandoned') tr.classList.add('abandoned');
 
   const tdStar = document.createElement('td');
   tdStar.className = 'star-cell';
@@ -216,6 +269,13 @@ function createStationRow(station, { outsideArea }) {
 
   const tdDate = document.createElement('td');
   tdDate.textContent = latest.date;
+  if (staleness === 'abandoned') {
+    const marker = document.createElement('span');
+    marker.className = 'abandoned-marker';
+    marker.textContent = '●';
+    marker.title = `Not seen on the source in over ${SOURCE_WINDOW_DAYS} days`;
+    tdDate.appendChild(marker);
+  }
 
   const tdDelta = document.createElement('td');
   if (avg == null) {
@@ -235,7 +295,40 @@ function createStationRow(station, { outsideArea }) {
   return tr;
 }
 
+function updateSortHeaders() {
+  document.querySelectorAll('#price-table th.sortable').forEach((th) => {
+    const key = th.dataset.sortKey;
+    const arrow = th.querySelector('.sort-arrow');
+    if (key === state.sortKey) {
+      th.setAttribute('aria-sort', state.sortDir === 'asc' ? 'ascending' : 'descending');
+      arrow.textContent = state.sortDir === 'asc' ? '↑' : '↓';
+    } else {
+      th.setAttribute('aria-sort', 'none');
+      arrow.textContent = '';
+    }
+  });
+}
+
+function setSort(key) {
+  if (state.sortKey === key) {
+    state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.sortKey = key;
+    state.sortDir = 'asc';
+  }
+  renderTable();
+}
+
+function initSortHeaders() {
+  document.querySelectorAll('#price-table th.sortable').forEach((th) => {
+    const btn = th.querySelector('.sort-btn');
+    btn.addEventListener('click', () => setSort(th.dataset.sortKey));
+  });
+}
+
 function renderTable() {
+  updateSortHeaders();
+
   const pinned = getPinnedStations();
   const main = getMainTableStations();
 
@@ -349,21 +442,44 @@ function renderMap() {
 // ---- Charts ----
 function populateStationSelect() {
   const select = document.getElementById('station-select');
+  const previousValue = state.selectedStationId || select.value;
+
   const options = Object.keys(state.history)
     .map((id) => ({
       id,
       name: (state.stationsById.get(Number(id)) || {}).name || `Station ${id}`,
+      count: computeStationPointCount(id, state.fuel),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const rich = options.filter((o) => o.count >= MIN_TREND_POINTS);
+  const sparse = options.filter((o) => o.count < MIN_TREND_POINTS);
+
   select.innerHTML = '';
-  for (const opt of options) {
-    const el = document.createElement('option');
-    el.value = opt.id;
-    el.textContent = opt.name;
-    select.appendChild(el);
+
+  const appendGroup = (label, opts) => {
+    if (!opts.length) return;
+    const group = document.createElement('optgroup');
+    group.label = label;
+    for (const opt of opts) {
+      const el = document.createElement('option');
+      el.value = opt.id;
+      el.textContent = `${opt.name} (${opt.count})`;
+      group.appendChild(el);
+    }
+    select.appendChild(group);
+  };
+
+  appendGroup(`Frequently reported (${MIN_TREND_POINTS}+ points)`, rich);
+  appendGroup('Rarely reported', sparse);
+
+  if (previousValue && options.some((o) => o.id === previousValue)) {
+    select.value = previousValue;
+  } else if (rich.length) {
+    select.value = rich[0].id;
+  } else if (options.length) {
+    select.value = options[0].id;
   }
-  if (options.length) select.value = options[0].id;
 }
 
 function renderFavoriteChips() {
@@ -387,6 +503,25 @@ function renderFavoriteChips() {
   }
 }
 
+function updateSparseNote() {
+  const note = document.getElementById('trend-sparse-note');
+  const id = state.selectedStationId;
+  if (!id) {
+    note.hidden = true;
+    return;
+  }
+  const count = computeStationPointCount(id, state.fuel);
+  if (count >= MIN_TREND_POINTS) {
+    note.hidden = true;
+    return;
+  }
+  const station = state.stationsById.get(Number(id));
+  const name = station ? station.name : 'This station';
+  const pointWord = count === 1 ? 'point' : 'points';
+  note.textContent = `${name} is rarely reported for ${FUEL_LABELS[state.fuel]} (${count} ${pointWord}) — the trend below is limited.`;
+  note.hidden = false;
+}
+
 function selectStation(stationId, { scroll = false } = {}) {
   const id = String(stationId);
   if (!state.history[id]) return;
@@ -398,6 +533,7 @@ function selectStation(stationId, { scroll = false } = {}) {
   if (select.value !== id) select.value = id;
 
   renderFavoriteChips();
+  updateSparseNote();
 
   if (scroll) {
     document.getElementById('trend-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -465,6 +601,8 @@ function setupControls() {
       state.fuel = btn.dataset.fuel;
       renderTable();
       renderMap();
+      populateStationSelect();
+      updateSparseNote();
     });
   });
 
@@ -542,6 +680,7 @@ async function main() {
   pruneFavorites();
 
   initMap();
+  initSortHeaders();
   renderTable();
   renderMap();
   populateStationSelect();

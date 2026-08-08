@@ -43,16 +43,28 @@ dead) → schema + upsert (done) → first live poll (done, 2026-07-09) → JSON
 export (done: `export.py`) → Actions workflow (done and running live:
 `.github/workflows/poll.yml` cron has fired every ~12 h without a miss since
 2026-07-12) → **dashboard v1** (done, committed, live at
-https://nickeniklas.github.io/fuel-dash/) → **dashboard UX pass** (done
-2026-07-19, browser-verified locally, not yet committed: clickable price-table
-rows and map popup buttons load a station into the trend chart and scroll to
-it, keeping the station `<select>` in sync; starred favorites persist in
-`localStorage` and pin to the top of the price table with quick-switch chips
-above the trend chart; a live name search filters the price table. All in
-`site/app.js` / `index.html` / `style.css`, no new dependencies) → **currently:
-letting data accumulate.** As of 2026-07-16: 89 stations (all geocoded), 474
-price rows, dates 2026-07-05 to 2026-07-16 (~11 days of history). v2 (heatmap,
-fill-now-or-wait signal) waits until weeks of data exist — not there yet.
+https://nickeniklas.github.io/fuel-dash/) → **dashboard UX pass** (done and
+committed 2026-07-19, commit `a1e5e07`: clickable price-table rows and map
+popup buttons load a station into the trend chart and scroll to it, keeping
+the station `<select>` in sync; starred favorites persist in `localStorage`
+and pin to the top of the price table with quick-switch chips above the trend
+chart; a live name search filters the price table) → **table/dropdown UX
+pass** (done 2026-08-08, verified in Node against live `site/data/*.json`,
+not yet committed: click-to-sort table headers — Station, Price, Reported,
+vs 7d avg — with `aria-sort` and an arrow indicator, null averages always
+sort last; the station picker groups by report frequency
+(`MIN_TREND_POINTS = 3`) into "frequently reported" / "rarely reported"
+optgroups with per-station point counts in the labels, repopulated on fuel
+change, plus a note near the trend chart when the selected station is
+sparse; graded staleness replaces the old binary stale flag — fresh / stale
+(0.5 dim, unchanged) / abandoned (`SOURCE_WINDOW_DAYS = 5`, stronger dim
+plus a marker on the date cell). All in `site/app.js` / `index.html` /
+`style.css`, no new dependencies) → **currently: letting data accumulate.**
+As of 2026-08-08: 120 stations (all geocoded), 476 price rows, dates
+2026-07-05 to 2026-08-08 (35 days of median history — but see the gotcha
+below, per-station report volume hasn't grown much with it). v2 (heatmap,
+fill-now-or-wait signal) waits until report volume itself grows, not just
+wall-clock time — not there yet.
 
 ## Gotchas
 
@@ -74,3 +86,17 @@ fill-now-or-wait signal) waits until weeks of data exist — not there yet.
   `fuel-dash:favorites` (array of station ids). Ids no longer present in
   `stations.json` are pruned automatically on load, so a stale favorite never
   breaks rendering.
+- Report volume is much sparser than wall-clock time suggests: 89 → 120
+  stations and only 474 → 476 price rows between 2026-07-16 and 2026-08-08
+  (measured live). Most rows are still each station's initial 5-day batch
+  from the poll that first found it; ongoing re-reports are rare. This is
+  why the station picker groups by report frequency and why a station's
+  `history.json` array length overstates useful trend data — always count
+  non-null entries for the *active fuel*, not raw array length
+  (`computeStationPointCount` in `app.js`).
+- `STALE_DAYS` (2) was measured live 2026-08-08 before touching it: only
+  ~20% of stations are "fresh" at that threshold. But ~59% of all stations
+  are past `SOURCE_WINDOW_DAYS` (5) entirely — genuinely no longer visible
+  on the source, not just slow to update. Kept `STALE_DAYS` at 2; the real
+  fix was splitting "stale" from "abandoned" into graded dimming, not
+  loosening the fresh/stale line.

@@ -87,8 +87,8 @@ GH Pages ── serves site/ ── index.html + Chart.js
 7. Dashboard v1 views (done, committed, live at
    https://nickeniklas.github.io/fuel-dash/: `site/index.html`,
    `style.css`, `app.js`)
-8. Let data accumulate; revisit v2 (in progress — see Resolved below for
-   current data volume)
+8. Let report volume accumulate (not just elapsed time — see Resolved
+   below); revisit v2 (in progress)
 
 ## Open items
 
@@ -160,5 +160,34 @@ GH Pages ── serves site/ ── index.html + Chart.js
   (3) A live, case-insensitive name search filters the price table; pinned
   favorites always stay visible regardless of the search text. `renderTable`
   / `renderMap` / `renderTrendChart` remain the single render paths.
-  Browser-verified locally against live `site/data/*.json`; not yet
-  committed.
+  Browser-verified locally against live `site/data/*.json`; committed same
+  day as commit `a1e5e07`.
+- Table/dropdown UX pass 2026-08-08: two UX problems and a threshold
+  decision, all in `site/` (`app.js`, `index.html`, `style.css`), no new
+  dependencies. (1) Price-table headers (Station, Price, Reported, vs 7d
+  avg) are click-to-sort — click toggles direction, switching columns
+  resets to ascending, `aria-sort` plus an arrow indicator show the active
+  column, headers are real `<button>`s inside the `<th>` for keyboard
+  access. The `vs 7d avg` sort always puts null-average stations last in
+  both directions (verified in Node: 79 null stations, all tail-positioned,
+  both sort directions). Pinned favorites sort by the same key/direction as
+  the main list. (2) The station `<select>` was listing ~66 stations with
+  fewer than 3 data points for a given fuel — mostly stations whose only
+  history is the initial 5-day batch the poller captured when it first
+  found them — next to ~28 stations with real trend data, with no way to
+  tell them apart. Added `MIN_TREND_POINTS = 3`, a per-fuel point count
+  (`computeStationPointCount`, counts non-null entries for the active fuel,
+  not raw history length), "frequently reported" / "rarely reported"
+  optgroups with counts in the option labels, repopulation on fuel change
+  that preserves the current selection, and a note near the trend chart
+  when the selected station is sparse. (3) Measured `STALE_DAYS` (2) live
+  before touching it, per fuel: only ~19–20 stations (≈20%) were "fresh",
+  ~74–80 (≈80%) dimmed. But of the dimmed stations, most (≈55 of ~74 for
+  95E10) were past a new `SOURCE_WINDOW_DAYS = 5` constant entirely — i.e.
+  genuinely no longer visible on the source, not just briefly stale. Kept
+  `STALE_DAYS` at 2 and instead graded the dimming: fresh / stale (0.5
+  opacity, unchanged) / abandoned (past `SOURCE_WINDOW_DAYS`, stronger
+  dimming plus a small marker on the date cell). All three verified in Node
+  against live `site/data/*.json` (sort ordering, null placement, dropdown
+  counts vs. `history.json`, staleness counts); not yet committed —
+  pending the user's own browser check.

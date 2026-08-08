@@ -153,6 +153,43 @@ tr.stale {
   opacity: 0.5;
 }
 
+tr.abandoned {
+  opacity: 0.28;
+}
+
+.abandoned-marker {
+  color: var(--muted);
+  font-size: 0.85em;
+  margin-left: 0.15rem;
+}
+
+th.sortable {
+  padding: 0;
+}
+
+.sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  padding: 0.5rem 0.6rem;
+}
+
+.sort-btn:hover {
+  color: var(--text);
+}
+
+.sort-arrow {
+  font-size: 0.85em;
+}
+
 tr.station-row {
   cursor: pointer;
 }
@@ -276,6 +313,13 @@ tr.pinned-divider td {
 .empty-note {
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.sparse-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  margin: -0.25rem 0 0.75rem 0;
 }
 
 #map {
