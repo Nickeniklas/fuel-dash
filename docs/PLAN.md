@@ -11,6 +11,12 @@ long-term price trends or a sorted city-wide list, so this project collects its 
 history and visualizes it. Poller collects prices into SQLite, exports JSON, a static
 Chart.js dashboard on GH Pages reads the JSON.
 
+Since 2026-09-03 there are two sources: the polttoaine.net scrape for per-station
+Helsinki-area prices, and the EU Weekly Oil Bulletin for official national weekly
+prices back to 2005. The second exists because the first has no history before our
+first poll and its per-station volume is thin — see the Resolved entry for that
+session. They are stored in separate SQLite files and never joined.
+
 ## Source: polttoaine.net
 
 Independent crowdsourced fuel price site, ~395 active stations across Finland.
@@ -31,7 +37,14 @@ Full parsing contract lives in `docs/SCRAPER.md`.
 - Dashboard: current prices sorted, colored vs each station's 7-day average;
   per-station trend chart with picker; area median lines for 95E10 / 98E / Diesel
 
-**v2 (deferred until weeks of data exist)**
+**v1.5 — official long-range context (done 2026-09-03)**
+- EU Weekly Oil Bulletin ingest into its own `eu.db`, FI/SE/DE/IT, 95 + diesel,
+  both tax variants, 2005 onwards
+- FI national weekly overlay + cents-per-litre gap readout on the area median chart
+- Separate 2005-onwards context chart with a 1/3/5/all year range selector
+- Page reframed so per-station trend is a secondary lookup, not the headline
+
+**v2 (deferred until per-station report volume exists)**
 - Day-of-week / price-cycle heatmap
 - "Fill now or wait" signal
 
@@ -53,6 +66,13 @@ accumulates from the first poll onward. v2 waits accordingly.
 | Coord source | Per-station map page parse | `ajax.php?act=map` bulk endpoint tested 2026-07-09, returns empty under every param/method/header combo tried — not usable. N map-page fetches it is, cached forever per station |
 | Poller runtime | Plain Python script, no LLM | Deterministic parsing needs no model; decision carried over from the original plan (Claude Code Routine rejected: shouldn't depend on the PC being on) |
 | Hosting | GH Actions cron + GH Pages serving `site/`, never `docs/` | Free, no server, already the plan; plan docs live in `docs/` and must not be published |
+| Second source | EU Weekly Oil Bulletin (DG Energy XLSX) | The scrape can never be backfilled and its per-station volume is thin; the bulletin gives official weekly national prices back to 2005 from one stable URL. Licence allows reproduction with acknowledgement |
+| Bulletin storage | Own file, `eu.db`, not `fuel.db` | `fuel.db` is committed on every 12 h poll. Merging them grew it 192 KB → 1.34 MB, so git would rewrite that blob twice a day for data that only changes weekly |
+| Bulletin cadence | Self-gate in `eu_bulletin.py`, no extra cron | The workbook is ~4.5 MB and updates weekly; the gate skips the download while our newest stored week is under `GATE_DAYS` (8) old, so the existing 12 h cron costs one download per bulletin instead of ~14 |
+| Countries stored | FI, SE, DE, IT — only FI displayed | Storing all four now makes adding one later a display change, not a re-ingest |
+| 98E national average | Not shown; overlay hidden with a note | The bulletin publishes no 98E series. Substituting the 95 series would be a quietly wrong number |
+| Without-taxes floor | Separate `EU_PRETAX_PRICE_MIN` (0.10) | The scraper's 0.80 EUR/L floor assumes tax is included; applied to pre-tax rows it rejected 84% of real data (measured live). The shared 4.00 ceiling still catches unit errors |
+| Per-station trend | Demoted to a secondary lookup under an honest subheading | 967 dated rows over 124 stations, median 6 points each, only 7 with 20+ — the data does not support presenting it as a headline feature |
 
 ## Architecture
 
@@ -63,15 +83,23 @@ GH Actions cron (12 h)          .github/workflows/poll.yml
   │    ├─ parse rows            → docs/SCRAPER.md is the contract
   │    ├─ resolve new stations  → stations table (cached coords)
   │    └─ upsert prices         → fuel.db (SQLite)
+  ├─ eu_bulletin.py
+  │    ├─ self-gate: newest eu.db week < GATE_DAYS old? exit 0, no download
+  │    ├─ GET one stable DG Energy XLSX URL (~4.5 MB)
+  │    └─ upsert FI/SE/DE/IT × 95/dsl × both tax variants → eu.db (SQLite)
   ├─ export.py
-  │    └─ write site/data/*.json  (all stations, coords included — shapes in site/data/README.md)
-  └─ commit fuel.db + site/data/*.json back to repo, then deploy Pages
+  │    ├─ fuel.db → site/data/{stations,history,medians}.json
+  │    └─ eu.db   → site/data/eu_weekly.json  (skipped + logged if eu.db absent)
+  └─ commit fuel.db + eu.db + site/data/*.json back to repo, then deploy Pages
        (own deploy job: GITHUB_TOKEN pushes don't trigger pages.yml's push trigger)
 
-GH Pages ── serves site/ ── index.html + Chart.js
-                              └─ reads site/data/*.json
+GH Pages ── serves site/ ── index.html + Chart.js + Leaflet
+                              └─ reads site/data/*.json (eu_weekly.json optional)
                               └─ applies 15 km display radius (config)
 ```
+
+Two SQLite files on purpose: `fuel.db` changes twice a day, `eu.db` weekly.
+`db.connect()` opens the first, `db.connect_eu()` the second.
 
 ## Build order
 
@@ -87,13 +115,28 @@ GH Pages ── serves site/ ── index.html + Chart.js
 7. Dashboard v1 views (done, committed, live at
    https://nickeniklas.github.io/fuel-dash/: `site/index.html`,
    `style.css`, `app.js`)
-8. Let report volume accumulate (not just elapsed time — see Resolved
-   below); revisit v2 (in progress)
+8. EU Weekly Oil Bulletin ingest + dashboard reframe (done 2026-09-03,
+   committed `06dcc4e` + `49655ae`, not yet pushed: `eu_bulletin.py`,
+   `eu.db`, `site/data/eu_weekly.json`, reordered dashboard — see Resolved)
+9. Let per-station report volume accumulate (not just elapsed time — see
+   Resolved below); revisit v2 (in progress)
 
 ## Open items
 
 - Exact page list for coverage (Helsinki + PK-Seutu + Kehä I + Kehä III as starting
   set) may grow; it's a config list.
+- `eu.db` and the initial `eu_weekly.json` are committed locally but **not pushed**
+  (`main` is ahead of `origin/main` by 2). First push puts a ~1.15 MB blob in
+  history permanently — intended, but deliberate.
+- SE/DE/IT bulletin rows are stored and exported but not displayed. Showing them is
+  a display-only change (`EU_COUNTRY` in `app.js`) whenever a country comparison is
+  wanted.
+- The without-taxes rows are stored but never exported. If a tax-share view is ever
+  wanted, the data is already there — only `export.py` and the dashboard change.
+- The 117-check jsdom front-end harness used to verify the reframe lives outside the
+  repo (scratchpad only) and is not committed. If front-end regressions become a
+  recurring worry, it's worth deciding whether to bring a version of it in as a real
+  dev dependency.
 
 ## Resolved
 
@@ -162,6 +205,62 @@ GH Pages ── serves site/ ── index.html + Chart.js
   / `renderMap` / `renderTrendChart` remain the single render paths.
   Browser-verified locally against live `site/data/*.json`; committed same
   day as commit `a1e5e07`.
+- EU Weekly Oil Bulletin ingest + dashboard reframe 2026-09-03, committed as
+  `06dcc4e` (code) and `49655ae` (data), not yet pushed. **Why now:** the area
+  median series had reached 60 unbroken days (2026-07-05 to 2026-09-02) and was
+  solid, but per-station history had not kept pace — 967 dated rows over 124
+  stations, median 6 points per station, only 7 stations with 20+. The dashboard
+  was presenting per-station trend as its headline feature on data that doesn't
+  support it, and no amount of waiting fixes the missing pre-poll history. So:
+  add an official long-range series, and reframe the page around what the data
+  actually supports.
+  (1) **Ingest.** `eu_bulletin.py` mirrors `poll.py`'s shape: fetch, parse,
+  upsert, idempotent. One stable DG Energy XLSX URL (no per-bulletin URL, no
+  date arithmetic on filenames), the whole 2005-onwards history in one file.
+  The workbook was downloaded and inspected before any parser code was written,
+  which caught three things an assumed layout would have got wrong: country
+  blocks are 7 *or* 8 columns wide (non-euro countries carry an extra
+  exchange-rate column, so columns must be found by their row-1 code, never by
+  offset); non-euro prices are already converted to EUR (applying SE's exchange
+  rate would have put Sweden at ~0.13 EUR/L); and there is no 98E series at all.
+  Stores FI/SE/DE/IT × 95/diesel × both tax variants = 17,308 rows over 1082
+  weekly dates, 2005-01-03 to 2026-08-31. Self-gated on `GATE_DAYS` (8) so the
+  12 h cron downloads once per bulletin rather than ~14 times.
+  (2) **Storage split.** `eu_weekly` initially went into `fuel.db` and grew it
+  from 192 KB to 1.34 MB — a blob git would rewrite on every 12 h poll commit
+  for data that changes weekly. Moved to its own `eu.db` before the first commit
+  (once in history it couldn't be removed without a rewrite): `db.connect()` /
+  `db.connect_eu()`, `export.py` opens both, and a missing or empty `eu.db` is a
+  logged skip rather than a crash. `fuel.db` is back to 192,512 bytes and
+  byte-identical to what it was; `eu.db` is 1,150,976 bytes.
+  (3) **Sanity bounds.** The shared 0.80–4.00 EUR/L bounds rejected zero
+  with-taxes rows but 7227 of 8654 without-taxes rows (84%) — pre-tax petrol
+  really was ~0.23–0.45 EUR/L in the 2000s. With-taxes keeps the shared bounds;
+  without-taxes got `EU_PRETAX_PRICE_MIN` (0.10). The 4.00 ceiling, which is
+  what actually catches a missed per-1000-litre conversion, is unchanged for both.
+  (4) **Dashboard reframe.** Order is now Prices → Map → Area median →
+  Long-term context → Station trend. The median chart gained an FI national
+  weekly overlay (dashed, muted, deliberately subordinate, same y axis since
+  both are EUR/L) plus a gap readout in cents per litre using the most recent
+  week present in both series; on 98E the overlay is hidden with a one-line note
+  instead of falling back to 95. A new context chart carries the 2005-onwards
+  depth with a 1/3/5/all year range selector windowed from the newest bulletin
+  week, never the browser clock. Per-station trend sits last under a one-sentence
+  subheading stating its limits, and the ~39-station "rarely reported" group is
+  collapsed behind a `fuel-dash:show-sparse` checkbox — with the row-click and
+  map-popup paths reveal-and-select so the picker always shows what the chart is
+  showing. A coverage line computed from the loaded JSON reports station count,
+  report count and median span. Footer now credits both polttoaine.net and the
+  EU bulletin (the latter is a licence condition).
+  (5) **Verification.** 92 Python unit tests, up from 52, including a committed
+  slice of the real workbook as a fixture (`tests/fixtures/eu_bulletin_slice.xlsx`,
+  regenerable via `make_eu_fixture.py`) covering the parse, the conversion, the
+  unit guard, both sanity floors, the gate, and export with `eu.db` absent or
+  empty. Front-end verified by 117 checks executing the real `index.html` +
+  `app.js` under jsdom against the live JSON, run both off the filesystem and
+  against `site/` served over `http://` — all passing, including the gap readout
+  against a hand calculation and the sparse-station row-click path. That harness
+  is scratchpad-only and not committed.
 - Table/dropdown UX pass 2026-08-08: two UX problems and a threshold
   decision, all in `site/` (`app.js`, `index.html`, `style.css`), no new
   dependencies. (1) Price-table headers (Station, Price, Reported, vs 7d
@@ -189,5 +288,5 @@ GH Pages ── serves site/ ── index.html + Chart.js
   opacity, unchanged) / abandoned (past `SOURCE_WINDOW_DAYS`, stronger
   dimming plus a small marker on the date cell). All three verified in Node
   against live `site/data/*.json` (sort ordering, null placement, dropdown
-  counts vs. `history.json`, staleness counts); not yet committed —
-  pending the user's own browser check.
+  counts vs. `history.json`, staleness counts); browser-checked by the user and
+  committed 2026-09-03 as part of `06dcc4e`.
