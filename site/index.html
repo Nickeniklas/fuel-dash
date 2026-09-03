@@ -31,6 +31,8 @@
 
   <div id="error-banner" class="error-banner" hidden></div>
 
+  <p id="coverage-line" class="coverage-line"></p>
+
   <section class="panel" aria-labelledby="table-heading">
     <h2 id="table-heading">Prices</h2>
     <div class="control-group table-search">
@@ -70,12 +72,47 @@
     <div id="map"></div>
   </section>
 
+  <section class="panel" aria-labelledby="median-heading">
+    <h2 id="median-heading">Area median trend</h2>
+    <p id="median-gap-readout" class="gap-readout" hidden></p>
+    <div class="chart-wrap">
+      <canvas id="median-chart"></canvas>
+    </div>
+    <p id="median-eu-note" class="empty-note" hidden></p>
+  </section>
+
+  <section class="panel" aria-labelledby="context-heading">
+    <h2 id="context-heading">Long-term context</h2>
+    <p class="section-note">
+      Official Finnish national weekly averages from the EU Weekly Oil Bulletin, published
+      since 2005. The bulletin has no 98E series.
+    </p>
+    <div class="control-group">
+      <span class="control-label">Range</span>
+      <div id="eu-range-buttons" class="range-buttons" role="group" aria-label="Context chart range"></div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="context-chart"></canvas>
+    </div>
+    <p id="context-empty" class="empty-note" hidden>National weekly prices are unavailable.</p>
+  </section>
+
   <section class="panel" aria-labelledby="trend-heading">
     <h2 id="trend-heading">Station trend</h2>
+    <p class="section-note">
+      Most stations are reported infrequently, so per-station history is sparse — this is a
+      lookup for the frequently reported stations rather than a trend for all of them.
+    </p>
     <div id="favorite-chips" class="favorite-chips" hidden></div>
     <div class="control-group">
       <label for="station-select" class="control-label">Station</label>
       <select id="station-select"></select>
+    </div>
+    <div class="control-group">
+      <label class="checkbox-label">
+        <input type="checkbox" id="show-sparse">
+        Show rarely reported stations
+      </label>
     </div>
     <p id="trend-sparse-note" class="sparse-note" hidden></p>
     <div class="chart-wrap">
@@ -83,14 +120,20 @@
     </div>
   </section>
 
-  <section class="panel" aria-labelledby="median-heading">
-    <h2 id="median-heading">Area median trend</h2>
-    <div class="chart-wrap">
-      <canvas id="median-chart"></canvas>
-    </div>
-  </section>
-
 </main>
+
+<footer class="footer">
+  <p>
+    Station prices crowdsourced from
+    <a href="https://polttoaine.net" rel="noopener noreferrer">polttoaine.net</a>.
+  </p>
+  <p>
+    National weekly prices from the
+    <a href="https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en" rel="noopener noreferrer">EU
+    Weekly Oil Bulletin</a> — European Commission, Directorate-General for Energy.
+    Reproduction is authorised provided the source is acknowledged.
+  </p>
+</footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

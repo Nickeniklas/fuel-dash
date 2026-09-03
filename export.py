@@ -1,4 +1,4 @@
-"""JSON export: fuel.db -> site/data/*.json for the static dashboard.
+"""JSON export: fuel.db + eu.db -> site/data/*.json for the static dashboard.
 
 File shapes are documented in site/data/README.md (written by this module).
 No geographic filtering here -- the dashboard applies the 15 km display
@@ -12,19 +12,30 @@ import logging
 from pathlib import Path
 from statistics import median
 
-from db import connect
+from db import connect, connect_eu
 
 logger = logging.getLogger(__name__)
 
 FUELS = ("95", "98", "dsl")
 
+# The EU Weekly Oil Bulletin has no 98E series, so its export covers 95/dsl
+# only; the dashboard hides the overlay when 98 is selected.
+EU_FUELS = ("95", "dsl")
+EU_COUNTRIES = ("FI", "SE", "DE", "IT")
+
 DB_PATH = Path(__file__).resolve().parent / "fuel.db"
+# The bulletin series lives in its own database -- see db.py's module docstring.
+EU_DB_PATH = Path(__file__).resolve().parent / "eu.db"
 OUT_DIR = Path(__file__).resolve().parent / "site" / "data"
 
 DATA_README = """# site/data — JSON export shapes
 
-Written by export.py from fuel.db. No geographic filtering: every station in
-the DB is included, the dashboard applies the 15 km display radius itself.
+Written by export.py from fuel.db (stations, history, medians) and eu.db
+(eu_weekly). No geographic filtering: every station in the DB is included,
+the dashboard applies the 15 km display radius itself.
+
+`eu_weekly.json` is skipped entirely if `eu.db` is absent or empty; the
+dashboard treats a missing file as "no national context" and degrades.
 
 ## stations.json
 
@@ -77,6 +88,35 @@ station reported it that day.
   {"date": "2026-07-08", "95": 2.089, "98": 2.189, "dsl": null},
   {"date": "2026-07-09", "95": 2.079, "98": 2.199, "dsl": 2.129}
 ]
+```
+
+## eu_weekly.json
+
+Official national weekly prices from the EU Weekly Oil Bulletin (European
+Commission, DG Energy), ingested by `eu_bulletin.py` into its own `eu.db`
+(kept out of `fuel.db`, which is committed twice a day). Object keyed by
+country code, then by fuel, each holding an array sorted oldest to newest.
+Prices are EUR/L (the bulletin quotes EUR per 1000 litres; the conversion
+happens at ingest).
+
+Only `with_taxes = 1` rows are exported. The bulletin publishes no 98E
+series, so the only fuel keys are `95` and `dsl` — the dashboard hides its
+national overlay when 98E is selected rather than substituting 95.
+
+A country key is present only if that country has at least one stored row;
+`FI` drives the dashboard, the rest are stored and exported ready for a
+later display change.
+
+```json
+{
+  "FI": {
+    "95": [{"date": "2026-08-24", "price": 2.177}, {"date": "2026-08-31", "price": 2.203}],
+    "dsl": [{"date": "2026-08-24", "price": 2.346}, {"date": "2026-08-31", "price": 2.334}]
+  },
+  "SE": {"95": [], "dsl": []},
+  "DE": {"95": [], "dsl": []},
+  "IT": {"95": [], "dsl": []}
+}
 ```
 """
 
@@ -140,14 +180,66 @@ def build_medians(conn) -> list[dict]:
     ]
 
 
+def build_eu_weekly(conn) -> dict[str, dict[str, list[dict]]]:
+    """Official weekly national prices per country and fuel, oldest to newest.
+
+    Reads an eu.db connection, not fuel.db. With-taxes rows only -- the
+    without-taxes variant is stored but not exported; nothing in the dashboard
+    reads it yet.
+    """
+    rows = conn.execute(
+        "SELECT country, fuel, week_date, price FROM eu_weekly "
+        "WHERE with_taxes = 1 ORDER BY country, fuel, week_date"
+    ).fetchall()
+    by_country: dict[str, dict[str, list[dict]]] = {}
+    for country, fuel, week_date, price in rows:
+        if country not in EU_COUNTRIES or fuel not in EU_FUELS:
+            continue
+        series = by_country.setdefault(country, {fuel: [] for fuel in EU_FUELS})
+        series[fuel].append({"date": week_date, "price": round(price, 4)})
+    return by_country
+
+
 def _write_json(path: Path, data) -> None:
     with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
 
-def export(db_path: Path = DB_PATH, out_dir: Path = OUT_DIR) -> None:
-    """Read fuel.db and write stations.json, history.json, medians.json to out_dir."""
+def _export_eu_weekly(out_dir: Path, eu_db_path: Path) -> bool:
+    """Write eu_weekly.json from eu.db, or skip it and log why.
+
+    A missing or empty eu.db is not an error: it just means the bulletin has
+    never been ingested in this checkout. The scraper's three files must still
+    export, so this never raises. Note it deliberately does not call
+    connect_eu() before checking the path -- that would create an empty eu.db
+    as a side effect of exporting.
+    """
+    if not eu_db_path.exists():
+        logger.info("no EU database at %s — skipping eu_weekly.json", eu_db_path)
+        return False
+
+    conn = connect_eu(eu_db_path)
+    try:
+        data = build_eu_weekly(conn)
+    finally:
+        conn.close()
+
+    if not data:
+        logger.info("EU database %s holds no exportable rows — skipping eu_weekly.json", eu_db_path)
+        return False
+
+    _write_json(out_dir / "eu_weekly.json", data)
+    return True
+
+
+def export(
+    db_path: Path = DB_PATH,
+    out_dir: Path = OUT_DIR,
+    eu_db_path: Path = EU_DB_PATH,
+) -> None:
+    """Write stations.json, history.json and medians.json from fuel.db, plus
+    eu_weekly.json from eu.db when that database is present and non-empty."""
     out_dir.mkdir(parents=True, exist_ok=True)
     conn = connect(db_path)
     try:
@@ -156,6 +248,8 @@ def export(db_path: Path = DB_PATH, out_dir: Path = OUT_DIR) -> None:
         _write_json(out_dir / "medians.json", build_medians(conn))
     finally:
         conn.close()
+
+    _export_eu_weekly(out_dir, Path(eu_db_path))
     (out_dir / "README.md").write_text(DATA_README, encoding="utf-8")
     logger.info("exported JSON to %s", out_dir)
 

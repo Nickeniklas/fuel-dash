@@ -1,8 +1,11 @@
-# SCRAPER contract — polttoaine.net
+# SCRAPER contract — polttoaine.net + EU Weekly Oil Bulletin
 
 Parsing spec written from reading Pumperly (GPL-3.0) plus our own checks, 2026-07-08.
 Facts only; all code in this repo is written from scratch. If the site changes,
 update this doc first, then the parser.
+
+Two sources now: the polttoaine.net scrape (most of this doc) and the EU Weekly
+Oil Bulletin workbook (its own section below, added 2026-09-03).
 
 ## Pages to crawl (config list)
 
@@ -84,7 +87,70 @@ Source gives `DD.MM.` only. Resolve year at parse time:
   politeness spacing as page crawling applies here too. Coords are cached forever
   once fetched, so this cost is paid once per station, not once per poll.
 
+## EU Weekly Oil Bulletin (second source)
+
+Official weekly national prices, added 2026-09-03. Not a scrape: one XLSX
+workbook, one stable URL, refreshed weekly by the European Commission's
+DG Energy. Parsed by `eu_bulletin.py` into its **own database, `eu.db`** --
+never `fuel.db`, see the Schema section for why. Layout facts below verified live
+2026-09-03 against the real file (4.46 MB) before any parser code was written.
+
+- **URL** (no per-bulletin URL exists, no date arithmetic on filenames):
+  `https://energy.ec.europa.eu/document/download/906e60ca-8b6a-44e7-8589-652854d2fd3f_en?filename=Weekly_Oil_Bulletin_Prices_History_maticni_4web.xlsx`
+- **Licence**: reproduction authorised provided the source is acknowledged.
+  The dashboard footer carries the attribution — do not drop it.
+- **Sheets**: `Prices with taxes`, `Prices wo taxes` (plus Consumption, VAT,
+  Excise duties, Excise duties - components, Other Indirect Taxes, all ignored).
+  Both price sheets are in this one workbook with an identical layout, so both
+  tax variants are stored from a single download.
+- **Orientation**: dates run **down column A, newest first** (2005-01-03 to the
+  current week, 1082 rows as of 2026-08-31); country × fuel run across columns.
+- **Header rows**: row 1 machine codes (`FI_price_with_tax_euro95`), row 2 human
+  fuel names, row 3 units. Data starts at row 4.
+- **Country blocks are NOT a fixed width** (7 or 8 columns). Each starts with a
+  `CTR` column whose data cells hold `FI_`, `SE_`, … Non-euro countries carry an
+  extra `<CC>_exchange_rate` column, which is why columns must be found by their
+  row-1 code, never by offset from the `CTR` marker.
+- **Non-euro prices are already converted to EUR.** SE's price columns are EUR
+  per 1000 l; the exchange-rate column is informational. Do not apply it —
+  double-converting would put Sweden at ~0.13 EUR/L.
+- **Fuels**: Euro-super 95, automotive gas oil (diesel), heating gas oil, two
+  fuel oils, LPG motor fuel. **There is no 98E series** — the dashboard hides
+  its national overlay for 98E rather than substituting the 95 series.
+- **Units**: `1000 l` for the 95/diesel columns, `t` for the two fuel oils.
+  The parser verifies the row-3 unit reads `1000 l` before taking a column, so a
+  layout shift onto a per-tonne column is rejected rather than silently stored
+  as litres. Prices are divided by 1000 at ingest; the DB holds EUR/L.
+- **Trailing rows**: after the data come blank rows and a `Notes:` footer. Row
+  acceptance requires a real date in column A — that one check clears the two
+  label rows, the blanks and the footer.
+- **Sanity bounds**: the with-taxes series uses the shared 0.80–4.00 EUR/L
+  bounds and (measured live) has zero violations. The **without-taxes series
+  needs a lower floor** — pre-tax petrol was ~0.23–0.45 EUR/L through the
+  2000s, and the retail floor rejected 7227 of 8654 real rows. See
+  `EU_PRETAX_PRICE_MIN` in `db.py`. The shared 4.00 ceiling is what catches a
+  missed per-1000-litre conversion, in both variants.
+- **Self-gate**: `eu_bulletin.py` queries `eu.db`'s newest stored `week_date`
+  first and exits 0 without downloading if it is within `GATE_DAYS` (8) of today.
+  The file is multi-megabyte and the source updates weekly, so the 12 h cron
+  would otherwise refetch it ~14 times per new bulletin. Politeness applies
+  here too: same honest User-Agent as the scraper.
+- **Countries stored**: FI, SE, DE, IT. Only FI is displayed; the others are
+  stored so adding one later is a display change, not a re-ingest.
+- **Fixture**: `tests/fixtures/eu_bulletin_slice.xlsx` is a committed slice of
+  the real workbook (regenerate with `tests/fixtures/make_eu_fixture.py`); the
+  full file is far too big to commit.
+
 ## Schema
+
+Two SQLite files, deliberately separate. `fuel.db` holds the scraper's tables
+and is committed on every 12 h poll; `eu.db` holds the bulletin series and only
+changes weekly. Putting `eu_weekly` in `fuel.db` grew it from ~192 KB to
+~1.34 MB (measured 2026-09-03), which git would then rewrite twice a day for
+data that hadn't changed. `db.connect()` opens the first, `db.connect_eu()` the
+second; nothing joins across them.
+
+### fuel.db
 
 ```sql
 CREATE TABLE stations (
@@ -104,6 +170,19 @@ CREATE TABLE prices (
 );
 ```
 
+### eu.db
+
+```sql
+CREATE TABLE eu_weekly (            -- EU Weekly Oil Bulletin, see above
+  country    TEXT NOT NULL,         -- 'FI' | 'SE' | 'DE' | 'IT'
+  fuel       TEXT NOT NULL,         -- '95' | 'dsl' (no 98E in this source)
+  week_date  TEXT NOT NULL,         -- ISO date of the bulletin week
+  price      REAL NOT NULL,         -- EUR/L, converted from EUR/1000 l
+  with_taxes INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(country, fuel, week_date, with_taxes)
+);
+```
+
 Date-only resolution is a source limitation: no timestamps exist, so one row per
 station/fuel/day, same-day changes overwrite to the latest seen value.
 
@@ -118,10 +197,13 @@ station/fuel/day, same-day changes overwrite to the latest seen value.
 
 ## Export
 
-`export.py` (run after `poll.py`, both invoked by `.github/workflows/poll.yml`)
-reads `fuel.db` and writes `site/data/stations.json` (all stations, coords,
+`export.py` (run after `poll.py` and `eu_bulletin.py`, all invoked by
+`.github/workflows/poll.yml`) reads `fuel.db` for the first three files and
+`eu.db` for the fourth, and writes `site/data/stations.json` (all stations, coords,
 latest price per fuel), `site/data/history.json` (per-station price history),
-and `site/data/medians.json` (daily area median per fuel). Exact shapes are
-documented in `site/data/README.md`, written by the same script. No
+`site/data/medians.json` (daily area median per fuel), and
+`site/data/eu_weekly.json` (official national weekly prices per country and
+fuel, with-taxes rows only). Exact shapes are documented in
+`site/data/README.md`, written by the same script. No
 geographic filtering here; the dashboard applies the 15 km display radius
 client-side (config).
