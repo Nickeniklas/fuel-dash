@@ -1,7 +1,11 @@
 name: Deploy Pages
 
 # Covers manual pushes that touch the site. Bot poll commits are deployed by
-# poll.yml's own deploy job (GITHUB_TOKEN pushes don't trigger this workflow).
+# poll.yml itself (GITHUB_TOKEN pushes don't trigger this workflow).
+#
+# site/data/*.json is gitignored, so the checkout has no JSON in it — this
+# workflow regenerates it from the committed fuel.db + eu.db with export.py
+# before uploading the artifact, or it would deploy a dataless site.
 on:
   push:
     branches: [main]
@@ -25,6 +29,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Export JSON
+        run: python export.py
+
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

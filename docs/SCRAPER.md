@@ -204,6 +204,8 @@ latest price per fuel), `site/data/history.json` (per-station price history),
 `site/data/medians.json` (daily area median per fuel), and
 `site/data/eu_weekly.json` (official national weekly prices per country and
 fuel, with-taxes rows only). Exact shapes are documented in
-`site/data/README.md`, written by the same script. No
+`site/data/README.md`, written by the same script. The four JSON files are
+gitignored derivatives, regenerated on every workflow run and served from the
+Pages artifact; only `fuel.db`, `eu.db` and this README are committed. No
 geographic filtering here; the dashboard applies the 15 km display radius
 client-side (config).

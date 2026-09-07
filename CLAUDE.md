@@ -60,7 +60,8 @@ resolution (done, per-station map page — `ajax.php?act=map` bulk endpoint is
 dead) → schema + upsert (done) → first live poll (done, 2026-07-09) → JSON
 export (done: `export.py`) → Actions workflow (done and running live:
 `.github/workflows/poll.yml` cron has fired every ~12 h without a miss since
-2026-07-12; the workflow now runs `poll.py` → `eu_bulletin.py` → `export.py`) →
+2026-07-12; the workflow now runs `poll.py` → `eu_bulletin.py` → `export.py`, then
+commits `fuel.db`/`eu.db` and deploys Pages from the same job) →
 **dashboard v1** (done, committed, live at
 https://nickeniklas.github.io/fuel-dash/) → **dashboard UX pass** (done and
 committed 2026-07-19, commit `a1e5e07`: clickable price-table rows and map
@@ -115,9 +116,18 @@ wall-clock time — not there yet.
   from the per-station map page (`index.php?cmd=map&id=<id>`) instead, one
   request per new station, cached forever. Detail: `docs/SCRAPER.md`.
 - GITHUB_TOKEN-authored pushes don't trigger other workflows' `push` triggers
-  — `poll.yml`'s commit of `fuel.db`/`site/data/*.json` won't fire `pages.yml`
-  even though it touches `site/**`. `poll.yml` has its own deploy job instead,
-  sharing the `pages` concurrency group with `pages.yml` so they never race.
+  — `poll.yml`'s commit of `fuel.db`/`eu.db` won't fire `pages.yml`. `poll.yml`
+  deploys for itself, sharing the `pages` concurrency group with `pages.yml` so
+  they never race.
+- **`site/data/*.json` is gitignored and generated at deploy time.** The four
+  export files are pure derivatives of `fuel.db` + `eu.db`; committing them on
+  every 12 h poll grew the repo forever (`history.json` worst) for data the
+  Pages artifact already carries. Two consequences: `poll.yml` runs the export
+  *and* the Pages upload in **one job** — a separate deploy job checking out
+  `main` would find no JSON — and `pages.yml` has to run `setup-python` +
+  `pip install` + `export.py` before its upload for the same reason. The commit
+  step adds only `fuel.db eu.db`. `site/data/README.md` stays tracked (it is
+  documentation, though `export.py` rewrites it on each run).
 - Favorites are stored client-side under the `localStorage` key
   `fuel-dash:favorites` (array of station ids). Ids no longer present in
   `stations.json` are pruned automatically on load, so a stale favorite never

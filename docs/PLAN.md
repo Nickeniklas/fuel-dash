@@ -90,8 +90,10 @@ GH Actions cron (12 h)          .github/workflows/poll.yml
   ├─ export.py
   │    ├─ fuel.db → site/data/{stations,history,medians}.json
   │    └─ eu.db   → site/data/eu_weekly.json  (skipped + logged if eu.db absent)
-  └─ commit fuel.db + eu.db + site/data/*.json back to repo, then deploy Pages
-       (own deploy job: GITHUB_TOKEN pushes don't trigger pages.yml's push trigger)
+  └─ commit fuel.db + eu.db back to repo, then deploy Pages from the runner
+       workspace, all in one job (site/data/*.json is gitignored and exists only
+       in the workspace, so the artifact upload must share the job that exported
+       it; and GITHUB_TOKEN pushes don't trigger pages.yml's push trigger anyway)
 
 GH Pages ── serves site/ ── index.html + Chart.js + Leaflet
                               └─ reads site/data/*.json (eu_weekly.json optional)

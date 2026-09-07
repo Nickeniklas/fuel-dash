@@ -108,11 +108,16 @@ regenerates the committed workbook slice the bulletin tests run against, if the
 source layout ever changes.
 
 `.github/workflows/poll.yml` runs the cron (every 12 h): `poll.py` →
-`eu_bulletin.py` → `export.py` → commit `fuel.db` + `eu.db` + `site/data/*.json`
-back to `main` (skipped if nothing changed) → deploy `site/` to GH Pages in the
-same run. It shares the `pages` concurrency group with `pages.yml` since
-GITHUB_TOKEN-authored pushes don't trigger other workflows' push triggers —
-`poll.yml` has to do its own deploy.
+`eu_bulletin.py` → `export.py` → commit `fuel.db` + `eu.db` back to `main`
+(skipped if nothing changed) → deploy `site/` to GH Pages, all in a single job.
+`site/data/*.json` is **gitignored**: it is regenerated from the two databases
+on every run, so it is built into the runner workspace and served from the Pages
+artifact rather than committed. That is why the deploy steps share the poll job —
+a separate job checking out `main` would find no JSON. `pages.yml` (manual pushes
+touching `site/**`) runs `export.py` against the committed databases for the same
+reason. Both share the `pages` concurrency group since GITHUB_TOKEN-authored
+pushes don't trigger other workflows' push triggers — `poll.yml` has to do its
+own deploy.
 
 ## Politeness
 

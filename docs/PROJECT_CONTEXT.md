@@ -81,11 +81,19 @@ site/data/README.md. A missing or empty eu.db is a logged skip, not an error;
 the dashboard degrades to no national context.
 
 Workflow: .github/workflows/poll.yml runs poll.py, then eu_bulletin.py, then
-export.py, commits fuel.db + eu.db + site/data/*.json back to main (skipped if
-nothing changed), then deploys site/ to GH Pages in the same run. It shares the
-"pages" concurrency group with pages.yml, because GITHUB_TOKEN-authored pushes
-don't trigger other workflows' push triggers, so poll.yml has to do its own
-deploy.
+export.py, commits fuel.db + eu.db back to main (skipped if nothing changed),
+then deploys site/ to GH Pages — all in one job. site/data/*.json is gitignored
+(it is a pure derivative of the two DBs, and committing it grew the repo on
+every poll), so the JSON exists only in the runner workspace and the artifact
+upload has to sit in the same job as the export; a separate deploy job checking
+out main would find no data. The commit step does git pull --rebase origin main
+before pushing, because the job checks out main at the start: a manual push
+landing mid-run used to make the push non-fast-forward, failing the run and
+losing that poll's data until the next cron. It shares the "pages" concurrency
+group with pages.yml, because GITHUB_TOKEN-authored pushes don't trigger other
+workflows' push triggers, so poll.yml has to do its own deploy. pages.yml, which
+covers manual pushes touching site/**, likewise runs export.py against the
+committed fuel.db + eu.db before uploading, or it would deploy a dataless site.
 
 Dashboard: static HTML + Chart.js 4.4.1 + Leaflet 1.9.4 in site/, no framework
 and no build step, served by GH Pages, reading only site/data/*.json. Dark

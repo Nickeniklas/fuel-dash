@@ -1,10 +1,19 @@
 name: Poll and Deploy
 
-# Cron poll of polttoaine.net, JSON export, commit back to main, then deploy
-# Pages from site/. GITHUB_TOKEN pushes don't trigger pages.yml (push paths
-# filter on site/**, and token-authored pushes are excluded from triggering
-# other workflows anyway), so this workflow does its own deploy job, reusing
-# the "pages" concurrency group so the two workflows never deploy at once.
+# Cron poll of polttoaine.net, JSON export, commit fuel.db + eu.db back to
+# main, then deploy Pages from site/ — all in one job. site/data/*.json is
+# gitignored and generated fresh into the runner workspace by export.py, so
+# the artifact upload has to happen in the same job that ran the export;
+# a separate deploy job checking out main would find no JSON at all.
+#
+# The commit step rebases onto origin/main before pushing: the job checks out
+# main when it starts, so a manual push landing mid-run would otherwise make
+# the bare push non-fast-forward, fail the run, and lose that poll's data
+# until the next cron fires.
+#
+# Shares the "pages" concurrency group with pages.yml so the two workflows
+# never deploy at once. GITHUB_TOKEN pushes don't trigger pages.yml, which is
+# why this workflow deploys for itself.
 
 on:
   schedule:
@@ -20,6 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
 
@@ -42,28 +56,14 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add fuel.db eu.db site/data
+          git add fuel.db eu.db
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
             git commit -m "poll: update fuel prices $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull --rebase origin main
             git push
           fi
-
-  deploy:
-    needs: poll
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: main
 
       - uses: actions/configure-pages@v6
 
