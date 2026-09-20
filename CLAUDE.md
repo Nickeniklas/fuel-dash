@@ -82,23 +82,30 @@ plus a marker on the date cell). All in `site/app.js` / `index.html` /
 `style.css`, no new dependencies; committed 2026-09-03 as part of `06dcc4e`) →
 **EU Weekly Oil Bulletin ingest +
 dashboard reframe** (done 2026-09-03, committed as `06dcc4e` (code) and
-`49655ae` (`eu.db` + `eu_weekly.json`), **not yet pushed**: `eu_bulletin.py`
-fetches one stable XLSX URL and upserts FI/SE/DE/IT × 95/diesel × both tax
-variants into `eu.db` (17,308 rows, 1082 weekly dates, 2005-01-03 to
-2026-08-31), self-gated so the 12 h cron only downloads when our newest week
-is more than `GATE_DAYS` (8) old; `export.py` adds `site/data/eu_weekly.json`;
-the dashboard was reordered to Prices → Map → Area median → Long-term context
-→ Station trend, with an FI national weekly overlay plus cents-per-litre gap
-readout on the median chart, a new 2005-onwards context chart with a 1/3/5/all
-year range selector, a computed coverage line, the EU + polttoaine footer
-credits, and the rarely-reported station group collapsed behind a checkbox) →
+`49655ae` (`eu.db` + `eu_weekly.json`), both pushed to `origin/main`:
+`eu_bulletin.py` fetches one stable XLSX URL and upserts FI/SE/DE/IT ×
+95/diesel × both tax variants into `eu.db` (17,308 rows, 1082 weekly dates,
+2005-01-03 to 2026-08-31), self-gated so the 12 h cron only downloads when our
+newest week is more than `GATE_DAYS` (8) old; `export.py` adds
+`site/data/eu_weekly.json`; the dashboard was reordered to Prices → Map → Area
+median → Long-term context → Station trend, with an FI national weekly overlay
+plus cents-per-litre gap readout on the median chart, a new 2005-onwards
+context chart with a 1/3/5/all year range selector, a computed coverage line,
+the EU + polttoaine footer credits, and the rarely-reported station group
+collapsed behind a checkbox) →
 **currently: letting data accumulate.**
-As of 2026-09-03: 124 stations (all geocoded), 2775 price rows, dates
-2026-07-05 to 2026-09-02 — `medians.json` now has **60 unbroken days**, which
-is real depth. Per-station history is still thin: 967 dated rows across 124
-stations, **median 6 points per station, only 7 stations with 20+** (see the
-gotcha below). That asymmetry is exactly why the dashboard was reframed around
-the area median plus official long-range context, and why per-station trend is
+As of 2026-09-20: 127 stations (all geocoded), 3123 price rows, dates
+2026-07-05 to 2026-09-19. `medians.json` holds **65 days of data across a
+77-day span, with a 12-day hole at 2026-09-04 → 2026-09-15**. The hole is a
+polling outage: the GitHub account was suspended, the cron could not run, and
+the source only exposes ~5 days of history, so everything older than that was
+unrecoverable when polling resumed on 2026-09-20. **No backfill exists and
+none ever will** — do not treat the gap as a bug to be repaired. The median
+series is still the deepest thing here, just no longer unbroken. Per-station
+history remains thin: 1086 dated rows across 127 stations, **median 7 points
+per station, only 9 stations with 20+** (see the gotcha below). That asymmetry
+is exactly why the dashboard was reframed around the area median plus official
+long-range context, and why per-station trend is
 now a secondary lookup rather than the headline. v2 (heatmap,
 fill-now-or-wait signal) still waits on per-station report volume, not
 wall-clock time — not there yet.
@@ -128,6 +135,20 @@ wall-clock time — not there yet.
   `pip install` + `export.py` before its upload for the same reason. The commit
   step adds only `fuel.db eu.db`. `site/data/README.md` stays tracked (it is
   documentation, though `export.py` rewrites it on each run).
+- **`medians.json` can contain null medians, and any consumer must handle
+  them.** Since 2026-09-20 `build_medians` emits one entry per calendar date
+  from the first observed date to the last, so a date nobody reported on is
+  present with `"95"`, `"98"` and `"dsl"` all `null` rather than missing from
+  the array. This is deliberate: the dashboard plots medians on a *categorical*
+  x-axis, where an absent date is an absent label, so the line closed over the
+  2026-09-04 → 2026-09-15 outage and read as an unbroken series. Nothing is
+  padded outside the observed range, so the first and last entries always hold
+  real data. Consequences for anything reading this file: last-entry lookups
+  must scan back to the last non-null entry (`computeReferenceDate` does),
+  deltas and reduces must skip nulls, and `medians.length` is now a *calendar
+  span*, not a count of days with data. **This applies outside the repo too:**
+  the weekly Claude commentary routine reads these exports straight from
+  raw.githubusercontent.com and will see nulls with no other warning.
 - Favorites are stored client-side under the `localStorage` key
   `fuel-dash:favorites` (array of station ids). Ids no longer present in
   `stations.json` are pruned automatically on load, so a stale favorite never
@@ -145,8 +166,8 @@ wall-clock time — not there yet.
   section on the page, not the headline; and a station's `history.json` array
   length overstates useful trend data — always count non-null entries for the
   *active fuel*, not raw array length (`computeStationPointCount` in `app.js`).
-  The area median is the opposite story and is genuinely deep (60 unbroken
-  days), which is why the reframe leans on it plus the EU bulletin.
+  The area median is the opposite story and is genuinely deep (65 days over a
+  77-day span), which is why the reframe leans on it plus the EU bulletin.
 - **EU bulletin workbook layout** (all verified live 2026-09-03 before any
   parser code was written — full detail in `docs/SCRAPER.md`):
   - Country blocks are **7 or 8 columns wide, not fixed**: non-euro countries

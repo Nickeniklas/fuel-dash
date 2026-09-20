@@ -98,6 +98,76 @@ class BuildMediansTests(unittest.TestCase):
         self.assertIsNone(self.medians["2026-07-08"]["dsl"])
 
 
+class MedianGapFillTests(unittest.TestCase):
+    """A polling outage must survive as a hole in the series, not vanish.
+
+    The dashboard plots medians on a categorical axis, so a date with no
+    entry is a date with no label: the line would close over the gap and
+    read as continuous. Filling the range with null entries is what makes
+    the outage visible and countable downstream.
+    """
+
+    def setUp(self):
+        self.conn = db.connect(":memory:")
+        db.upsert_station(self.conn, 1051, "St1, Lauttasaari", REFERENCE)
+
+    def _medians(self):
+        return e.build_medians(self.conn)
+
+    def test_interior_hole_becomes_null_entries(self):
+        db.upsert_price(self.conn, 1051, "95", "2026-09-02", 2.089)
+        db.upsert_price(self.conn, 1051, "95", "2026-09-06", 2.109)
+        entries = {m["date"]: m for m in self._medians()}
+        self.assertEqual(
+            sorted(entries),
+            ["2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06"],
+        )
+        for missing in ("2026-09-03", "2026-09-04", "2026-09-05"):
+            self.assertIsNone(entries[missing]["95"], missing)
+            self.assertIsNone(entries[missing]["98"], missing)
+            self.assertIsNone(entries[missing]["dsl"], missing)
+
+    def test_observed_dates_keep_their_values(self):
+        db.upsert_price(self.conn, 1051, "95", "2026-09-02", 2.089)
+        db.upsert_price(self.conn, 1051, "95", "2026-09-06", 2.109)
+        entries = {m["date"]: m for m in self._medians()}
+        self.assertEqual(entries["2026-09-02"]["95"], 2.089)
+        self.assertEqual(entries["2026-09-06"]["95"], 2.109)
+
+    def test_no_padding_outside_observed_range(self):
+        db.upsert_price(self.conn, 1051, "95", "2026-09-02", 2.089)
+        db.upsert_price(self.conn, 1051, "95", "2026-09-06", 2.109)
+        entries = self._medians()
+        self.assertEqual(entries[0]["date"], "2026-09-02")
+        self.assertEqual(entries[-1]["date"], "2026-09-06")
+
+    def test_contiguous_series_gains_no_null_entries(self):
+        db.upsert_price(self.conn, 1051, "95", "2026-09-02", 2.089)
+        db.upsert_price(self.conn, 1051, "95", "2026-09-03", 2.099)
+        entries = self._medians()
+        self.assertEqual([m["date"] for m in entries], ["2026-09-02", "2026-09-03"])
+        self.assertTrue(all(m["95"] is not None for m in entries))
+
+    def test_single_entry_series(self):
+        db.upsert_price(self.conn, 1051, "95", "2026-09-02", 2.089)
+        entries = self._medians()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["date"], "2026-09-02")
+        self.assertEqual(entries[0]["95"], 2.089)
+
+    def test_empty_series(self):
+        self.assertEqual(self._medians(), [])
+
+    def test_entry_count_equals_calendar_span(self):
+        db.upsert_price(self.conn, 1051, "95", "2026-09-02", 2.089)
+        db.upsert_price(self.conn, 1051, "95", "2026-09-20", 2.109)
+        entries = self._medians()
+        span = (date(2026, 9, 20) - date(2026, 9, 2)).days + 1
+        self.assertEqual(len(entries), span)
+        nulls = [m for m in entries if m["95"] is None]
+        self.assertEqual(len(nulls), span - 2)
+
+
 class ExportFilesTests(unittest.TestCase):
     """End-to-end: export() writes valid JSON files to disk from a real DB file."""
 

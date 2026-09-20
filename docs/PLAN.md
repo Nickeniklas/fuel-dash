@@ -263,6 +263,16 @@ Two SQLite files on purpose: `fuel.db` changes twice a day, `eu.db` weekly.
   against `site/` served over `http://` — all passing, including the gap readout
   against a hand calculation and the sparse-station row-click path. That harness
   is scratchpad-only and not committed.
+- Polling outage 2026-09-04 → 2026-09-15 (12 days), cause: the GitHub account
+  was suspended, so the cron could not fire. Polling resumed 2026-09-20 and
+  recovered only 2026-09-16 onward, the source's ~5-day visibility window; the
+  rest is permanently lost. The "60 unbroken days" above was true when written
+  and is kept as the record of why the reframe happened, but the median series
+  is now 65 days of data across a 77-day span. `export.py` was changed to emit
+  an entry for every calendar date in range, with all fuels null on the missing
+  ones, so the gap renders as a break instead of the categorical x-axis closing
+  over it; the coverage line reports data-days, span and missing days
+  separately. Consumers of `medians.json` must handle null medians.
 - Table/dropdown UX pass 2026-08-08: two UX problems and a threshold
   decision, all in `site/` (`app.js`, `index.html`, `style.css`), no new
   dependencies. (1) Price-table headers (Station, Price, Reported, vs 7d

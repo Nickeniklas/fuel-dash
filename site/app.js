@@ -99,9 +99,19 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// medians.json now carries an entry for every calendar date in range, so a
+// date nobody reported on is present with every fuel null. The reference
+// date drives staleness grading and the 7-day average window, so it has to
+// be the last date with real data, never a gap filler.
+function hasAnyMedian(entry) {
+  return FUEL_ORDER.some((f) => entry[f] != null);
+}
+
 function computeReferenceDate(medians) {
-  if (!medians.length) return new Date().toISOString().slice(0, 10);
-  return medians[medians.length - 1].date;
+  for (let i = medians.length - 1; i >= 0; i--) {
+    if (hasAnyMedian(medians[i])) return medians[i].date;
+  }
+  return new Date().toISOString().slice(0, 10);
 }
 
 function computeStationAvg(stationId, fuel) {
@@ -615,13 +625,17 @@ function selectStation(stationId, { scroll = false } = {}) {
   }
 }
 
-function fuelDatasets(entries) {
+// spanGaps is caller's choice because this builds both charts. The station
+// trend chart spans: per-station reports are sparse by nature (median 6
+// points), and breaking those lines would leave mostly dots. The median
+// chart does not span, so an outage reads as the hole it is.
+function fuelDatasets(entries, { spanGaps = true } = {}) {
   return FUEL_ORDER.map((f) => ({
     label: FUEL_LABELS[f],
     data: entries.map((e) => (e[f] != null ? e[f] : null)),
     borderColor: FUEL_LINE_COLORS[f],
     backgroundColor: FUEL_LINE_COLORS[f],
-    spanGaps: true,
+    spanGaps,
     tension: 0.15,
     pointRadius: 3,
   }));
@@ -728,7 +742,9 @@ function renderMedianEuNote() {
 
 function renderMedianChart() {
   const labels = state.medians.map((e) => e.date);
-  const datasets = fuelDatasets(state.medians);
+  const datasets = fuelDatasets(state.medians, { spanGaps: false });
+  // The EU overlay keeps its own spanGaps: it is a weekly series against a
+  // daily axis, so it is legitimately null on six days out of seven.
   const overlay = euOverlayDataset(labels);
   if (overlay) datasets.push(overlay);
 
@@ -868,10 +884,17 @@ function renderCoverageLine() {
     `${reportCount} report${reportCount === 1 ? '' : 's'}`,
   ];
   if (state.medians.length) {
-    const first = state.medians[0].date;
-    const last = state.medians[state.medians.length - 1].date;
-    const days = Math.round(daysBefore(last, first)) + 1;
-    parts.push(`${days} days of area medians (${first} to ${last})`);
+    // Every calendar date in range is an entry, so the span is the entry
+    // count and the days with data are the non-null ones. Both are counted
+    // from the loaded JSON; neither the gap nor its size is ever hardcoded.
+    const span = state.medians.length;
+    const withData = state.medians.filter(hasAnyMedian).length;
+    const missing = span - withData;
+    let text = `${withData} day${withData === 1 ? '' : 's'} of area medians`;
+    if (missing > 0) {
+      text += ` across ${span} days (${missing} day${missing === 1 ? '' : 's'} missing)`;
+    }
+    parts.push(text);
   }
   el.textContent = parts.join(' · ');
   el.hidden = false;

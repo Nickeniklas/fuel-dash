@@ -49,9 +49,12 @@ on a date if that fuel was reported that day.
 
 ## medians.json
 
-Array of daily area-wide medians per fuel, one entry per date that has any
-price data, sorted oldest to newest. A fuel is `null` on a date if no
-station reported it that day.
+Array of daily area-wide medians per fuel, sorted oldest to newest. One
+entry per calendar date from the first observed date to the last, with no
+padding outside that range -- dates in the middle that nobody reported on
+are present with every fuel `null`, so a polling outage shows as a gap
+rather than disappearing. A fuel is `null` on a date if no station
+reported it that day, so **consumers must handle null medians.**
 
 ```json
 [

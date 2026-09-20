@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date as _date, timedelta
 from pathlib import Path
 from statistics import median
 
@@ -79,9 +80,12 @@ on a date if that fuel was reported that day.
 
 ## medians.json
 
-Array of daily area-wide medians per fuel, one entry per date that has any
-price data, sorted oldest to newest. A fuel is `null` on a date if no
-station reported it that day.
+Array of daily area-wide medians per fuel, sorted oldest to newest. One
+entry per calendar date from the first observed date to the last, with no
+padding outside that range -- dates in the middle that nobody reported on
+are present with every fuel `null`, so a polling outage shows as a gap
+rather than disappearing. A fuel is `null` on a date if no station
+reported it that day, so **consumers must handle null medians.**
 
 ```json
 [
@@ -162,21 +166,45 @@ def build_history(conn) -> dict[str, list[dict]]:
     }
 
 
+def _date_range(first: str, last: str) -> list[str]:
+    """Every ISO date from first to last inclusive."""
+    start, end = _date.fromisoformat(first), _date.fromisoformat(last)
+    return [(start + timedelta(days=n)).isoformat() for n in range((end - start).days + 1)]
+
+
 def build_medians(conn) -> list[dict]:
-    """Daily area-wide median price per fuel, oldest to newest."""
+    """Daily area-wide median price per fuel, oldest to newest.
+
+    Emits one entry per calendar date between the first and last observed
+    date, not one per date that happens to have data. A date nobody reported
+    on gets an entry with every fuel null, so a polling outage reads as a
+    break in the series instead of silently vanishing: the dashboard plots
+    these on a categorical axis, where a missing date is a missing label and
+    the line would close over the hole as if the days never existed.
+
+    Nothing is padded outside the observed range -- the first and last
+    entries are always real data. Null is the same "nobody reported this"
+    marker the per-fuel nulls already use; 0 would be a plottable price that
+    drags medians, minima and averages toward zero.
+    """
     rows = conn.execute("SELECT date, fuel, price FROM prices ORDER BY date").fetchall()
     by_date: dict[str, dict[str, list[float]]] = {}
     for price_date, fuel, price in rows:
         by_date.setdefault(price_date, {}).setdefault(fuel, []).append(price)
+    if not by_date:
+        return []
+    observed = sorted(by_date)
     return [
         {
             "date": price_date,
             **{
-                fuel: round(median(by_date[price_date][fuel]), 3) if fuel in by_date[price_date] else None
+                fuel: round(median(by_date[price_date][fuel]), 3)
+                if fuel in by_date.get(price_date, {})
+                else None
                 for fuel in FUELS
             },
         }
-        for price_date in sorted(by_date)
+        for price_date in _date_range(observed[0], observed[-1])
     ]
 
 
