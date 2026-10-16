@@ -142,7 +142,9 @@ would deploy a dataless site.
 
 Dashboard: static HTML + Chart.js 4.4.1 + Leaflet 1.9.4 in site/, no framework
 and no build step, served by GH Pages, reading only site/data/*.json. Dark
-theme, CartoDB dark_matter tiles. Sticky fuel (95/98/dsl) and radius (15 km /
+theme, Esri World Dark Gray Canvas tiles (keyless base + reference layers,
+attribution required; replaced CARTO dark_matter 2026-10-16 when CARTO began
+requiring an API key). Sticky fuel (95/98/dsl) and radius (15 km /
 all) controls. Page order since the 2026-09-03 reframe:
 
 - Coverage line, computed from the loaded JSON (station count, report count,

@@ -426,10 +426,21 @@ function renderTable() {
 
 // ---- Map ----
 function initMap() {
-  state.map = L.map('map', { scrollWheelZoom: false }).setView(HELSINKI_CENTER, 10);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-    maxZoom: 19,
+  state.map = L.map('map', { scrollWheelZoom: false, maxZoom: 18 }).setView(HELSINKI_CENTER, 10);
+  // Esri World Dark Gray Canvas replaced CARTO dark_all in Oct 2026, when CARTO
+  // started requiring an API key. This is Esri's keyless legacy endpoint
+  // ("mature support"). Esri's terms require the attribution below; it sits on
+  // the base layer only so it isn't duplicated. Note the {z}/{y}/{x} order.
+  // Detail ends at z16 in Europe, so Leaflet upscales z17-18.
+  const esriCanvas = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas';
+  L.tileLayer(`${esriCanvas}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, {
+    attribution: 'Powered by <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> | Sources: Esri, HERE, Garmin, &copy; OpenStreetMap contributors, and the GIS User Community',
+    maxNativeZoom: 16,
+    maxZoom: 18,
+  }).addTo(state.map);
+  L.tileLayer(`${esriCanvas}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`, {
+    maxNativeZoom: 16,
+    maxZoom: 18,
   }).addTo(state.map);
   state.markersLayer = L.layerGroup().addTo(state.map);
 

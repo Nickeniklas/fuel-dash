@@ -158,7 +158,9 @@ Two SQLite files on purpose: `fuel.db` changes twice a day, `eu.db` weekly.
   before trusting the cron. Build order is at step 6 of 8; dashboard v1 is next.
 - Dashboard v1 built 2026-07-11: vanilla HTML/CSS/JS in `site/` (no build
   step), Chart.js + Leaflet from CDN, dark theme, CartoDB dark tiles for the
-  map. Sticky fuel/radius controls drive a cheapest-first price table
+  map (replaced 2026-10-16 by Esri's keyless World Dark Gray Canvas base +
+  reference layers after CARTO started requiring an API key). Sticky
+  fuel/radius controls drive a cheapest-first price table
   (colored vs each station's own 7-day average), a Leaflet map (marker color
   = spatial cheapness vs the displayed set's median), a per-station Chart.js
   trend line, and an area median chart. All tunables (`HELSINKI_CENTER`,
