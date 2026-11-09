@@ -58,7 +58,8 @@ Consequences for anything reading the file:
 - deltas and reduces must skip nulls
 - medians.length is now a calendar span, not a count of days with data
 - this applies outside the repo too. The weekly Claude commentary routine reads
-  these exports straight from raw.githubusercontent.com and gets no other
+  these exports from Pages (https://nickeniklas.github.io/fuel-dash/data/*.json;
+  the JSON is no longer in git) and gets no other
   warning
 
 Chart behaviour is opt-in per chart, not global. fuelDatasets takes a spanGaps
@@ -247,8 +248,9 @@ Documentation layout and the rules governing it
 
 Open items
 
-- The out-of-repo weekly commentary routine reads medians.json from
-  raw.githubusercontent.com. If it derives "days of data" from array length it
+- The out-of-repo weekly commentary routine reads medians.json, now only
+  available from Pages (https://nickeniklas.github.io/fuel-dash/data/medians.json;
+  it is no longer in git, so raw.githubusercontent.com has no current copy). If it derives "days of data" from array length it
   is now silently wrong, since that length is a calendar span. CLAUDE.md warns
   about it; the routine itself is unfixed.
 - SE/DE/IT bulletin rows are stored and exported but not displayed. Showing one

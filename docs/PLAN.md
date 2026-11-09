@@ -112,13 +112,13 @@ Two SQLite files on purpose: `fuel.db` changes twice a day, `eu.db` weekly.
 4. SQLite schema + upsert + dedupe (done)
 5. JSON export (done, 2026-07-10: `export.py`, 14 unit tests)
 6. GH Actions workflow: cron, run poller, commit (done, committed and
-   running live: `.github/workflows/poll.yml` has fired every ~12 h without
-   a miss since 2026-07-12)
+   running live: `.github/workflows/poll.yml` fires every ~12 h; one
+   polling outage 2026-09-04 → 2026-09-15, permanent gap, no backfill)
 7. Dashboard v1 views (done, committed, live at
    https://nickeniklas.github.io/fuel-dash/: `site/index.html`,
    `style.css`, `app.js`)
 8. EU Weekly Oil Bulletin ingest + dashboard reframe (done 2026-09-03,
-   committed `06dcc4e` + `49655ae`, not yet pushed: `eu_bulletin.py`,
+   committed `06dcc4e` + `49655ae`, pushed: `eu_bulletin.py`,
    `eu.db`, `site/data/eu_weekly.json`, reordered dashboard — see Resolved)
 9. Let per-station report volume accumulate (not just elapsed time — see
    Resolved below); revisit v2 (in progress)
@@ -303,4 +303,4 @@ Two SQLite files on purpose: `fuel.db` changes twice a day, `eu.db` weekly.
   dimming plus a small marker on the date cell). All three verified in Node
   against live `site/data/*.json` (sort ordering, null placement, dropdown
   counts vs. `history.json`, staleness counts); browser-checked by the user and
-  committed 2026-09-03 as part of `06dcc4e`.
+  committed 2026-08-08 as part of `8ac781b`.
