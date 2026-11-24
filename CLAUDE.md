@@ -20,7 +20,8 @@ Built and running; currently **letting data accumulate**.
 
 - **Pipeline:** `.github/workflows/poll.yml` (cron `0 */12 * * *` + manual
   dispatch) runs `poll.py` → `eu_bulletin.py` → `export.py`, commits
-  `fuel.db`/`eu.db` if changed, and deploys Pages from the same job.
+  `fuel.db`/`eu.db` if changed, and uploads the Pages artifact; a second
+  `deploy` job in the same workflow then publishes it.
   `pages.yml` redeploys on manual pushes touching `site/**`.
 - **Scraper:** `poll.py` polls four pages (Helsinki, PK-Seutu, Kehä I,
   Kehä III); new stations are geocoded from the per-station map page
@@ -114,8 +115,13 @@ dropped entirely, clean DB, no workarounds. Do not suggest going back to it.
   export files are pure derivatives of `fuel.db` + `eu.db`; committing them on
   every 12 h poll grew the repo forever (`history.json` worst) for data the
   Pages artifact already carries. Two consequences: `poll.yml` runs the export
-  *and* the Pages upload in **one job** — a separate deploy job checking out
-  `main` would find no JSON — and `pages.yml` has to run `setup-python` +
+  *and* the Pages artifact upload in **one job** (`poll`) — a separate job
+  checking out `main` would find no JSON. `deploy-pages` then runs in its own
+  `deploy` job (`needs: poll`), because in the same job as the upload it can
+  query the artifact list before GitHub registers the upload and fail with "No
+  artifacts named github-pages were found" (actions/deploy-pages#451). "Re-run
+  failed jobs" therefore reruns only the deploy. `pages.yml` is split the same
+  way (`build` → `deploy`) and has to run `setup-python` +
   `pip install` + `export.py` before its upload for the same reason. The commit
   step adds only `fuel.db eu.db`. `site/data/README.md` stays tracked (it is
   documentation, though `export.py` rewrites it on each run).
