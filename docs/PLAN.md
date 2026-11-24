@@ -90,10 +90,13 @@ GH Actions cron (12 h)          .github/workflows/poll.yml
   ├─ export.py
   │    ├─ fuel.db → site/data/{stations,history,medians}.json
   │    └─ eu.db   → site/data/eu_weekly.json  (skipped + logged if eu.db absent)
-  └─ commit fuel.db + eu.db back to repo, then deploy Pages from the runner
-       workspace, all in one job (site/data/*.json is gitignored and exists only
-       in the workspace, so the artifact upload must share the job that exported
-       it; and GITHUB_TOKEN pushes don't trigger pages.yml's push trigger anyway)
+  └─ commit fuel.db + eu.db back to repo, upload site/ as the Pages artifact
+       (site/data/*.json is gitignored and exists only in the runner workspace,
+       so the upload must share the job that exported it), then a separate
+       `deploy` job (needs: poll) runs deploy-pages — own job because deploy in
+       the same job as the upload can race artifact registration
+       (actions/deploy-pages#451). GITHUB_TOKEN pushes don't trigger pages.yml's
+       push trigger, which is why poll.yml deploys for itself.
 
 GH Pages ── serves site/ ── index.html + Chart.js + Leaflet
                               └─ reads site/data/*.json (eu_weekly.json optional)
@@ -304,3 +307,15 @@ Two SQLite files on purpose: `fuel.db` changes twice a day, `eu.db` weekly.
   against live `site/data/*.json` (sort ordering, null placement, dropdown
   counts vs. `history.json`, staleness counts); browser-checked by the user and
   committed 2026-08-08 as part of `8ac781b`.
+- Pages deploy split into its own job 2026-11-24: `deploy-pages@v5`
+  intermittently failed with "Found 0 artifact(s) / No artifacts named
+  github-pages were found" right after a successful `upload-pages-artifact@v5`
+  in the same job. Cause is the upstream race in actions/deploy-pages#451: when
+  upload and deploy share a job, the artifact is not always listed yet when
+  deploy queries for it. "Re-run failed jobs" could not recover it either, since
+  it re-uploaded and hit "Multiple artifacts named github-pages". Both
+  `poll.yml` and `pages.yml` now split: the upload stays in the job that ran
+  `export.py` (the gitignored JSON only exists there), and a separate `deploy`
+  job (`needs:`) runs only `deploy-pages` in the `github-pages` environment. A
+  failed deploy never loses data, since the DB commit happens in the poll job
+  first. Supersedes the one-job layout described in the 2026-07-10 entry.

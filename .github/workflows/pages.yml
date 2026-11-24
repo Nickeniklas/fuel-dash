@@ -6,6 +6,14 @@ name: Deploy Pages
 # site/data/*.json is gitignored, so the checkout has no JSON in it — this
 # workflow regenerates it from the committed fuel.db + eu.db with export.py
 # before uploading the artifact, or it would deploy a dataless site.
+#
+# Two jobs. build regenerates the JSON and uploads the Pages artifact (the
+# upload has to share a job with export.py, since the JSON exists only in that
+# runner's workspace). deploy runs deploy-pages on its own, because in the same
+# job it sometimes queries the artifact list before GitHub has registered the
+# upload and fails with "No artifacts named github-pages were found"
+# (actions/deploy-pages#451). "Re-run failed jobs" is safe: it reruns only
+# deploy.
 on:
   push:
     branches: [main]
@@ -22,11 +30,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
 
@@ -43,5 +48,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5

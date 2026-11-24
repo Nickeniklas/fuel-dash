@@ -124,22 +124,42 @@ eu.db for eu_weekly.json (FI/SE/DE/IT, 95/dsl, with-taxes only, EUR/L). Exact
 shapes in site/data/README.md, which export.py writes. A missing or empty eu.db
 is a logged skip, not an error; the dashboard degrades to no national context.
 
-Workflow: .github/workflows/poll.yml runs poll.py, then eu_bulletin.py, then
-export.py, commits fuel.db + eu.db back to main (skipped if nothing changed),
-then deploys site/ to GH Pages, all in one job. site/data/*.json is gitignored
-(a pure derivative of the two DBs, and committing it grew the repo on every
-poll), so the JSON exists only in the runner workspace and the artifact upload
-has to sit in the same job as the export; a separate deploy job checking out
-main would find no data. The commit step adds only fuel.db eu.db, verified live
-on 2026-09-20 (the bot commit contained those two files and no JSON). The
-commit step does git pull --rebase origin main before pushing, because the job
-checks out main at the start: a manual push landing mid-run used to make the
-push non-fast-forward, failing the run and losing that poll's data. It shares
-the "pages" concurrency group with pages.yml, because GITHUB_TOKEN-authored
-pushes don't trigger other workflows' push triggers, so poll.yml has to do its
-own deploy. pages.yml, which covers manual pushes touching site/**, likewise
-runs export.py against the committed fuel.db + eu.db before uploading, or it
-would deploy a dataless site.
+Workflow: .github/workflows/poll.yml has two jobs. The poll job runs poll.py,
+then eu_bulletin.py, then export.py, commits fuel.db + eu.db back to main
+(skipped if nothing changed), then runs configure-pages and uploads site/ as
+the github-pages artifact. The deploy job (needs: poll) runs only
+deploy-pages, in the github-pages environment.
+
+Why the split sits exactly there:
+
+- site/data/*.json is gitignored (a pure derivative of the two DBs, and
+  committing it grew the repo on every poll), so the JSON exists only in the
+  poll job's runner workspace. The artifact upload has to stay in the same job
+  as the export. The deploy job needs no checkout; the artifact carries the
+  data.
+- deploy-pages must not share a job with the upload. Until 2026-11-24 both
+  ran in one job, and some runs failed with "Found 0 artifact(s) / No
+  artifacts named github-pages were found" even though the upload had
+  succeeded a moment earlier. This is a known upstream race
+  (actions/deploy-pages#451): the artifact isn't always listed yet when deploy
+  queries for it straight after the upload. A job boundary fixes it. It also
+  makes "Re-run failed jobs" safe, since it reruns only deploy. In the old
+  one-job layout a rerun uploaded a second artifact and failed with "Multiple
+  artifacts named github-pages".
+
+A failed deploy never loses data: the commit step runs in the poll job, before
+the deploy job starts. The commit step adds only fuel.db eu.db, verified live
+on 2026-09-20 (the bot commit contained those two files and no JSON). It does
+git pull --rebase origin main before pushing, because the job checks out main
+at the start: a manual push landing mid-run used to make the push
+non-fast-forward, failing the run and losing that poll's data.
+
+poll.yml shares the "pages" concurrency group with pages.yml, because
+GITHUB_TOKEN-authored pushes don't trigger other workflows' push triggers, so
+poll.yml has to do its own deploy. pages.yml, which covers manual pushes
+touching site/**, has the same build/deploy split: its build job runs
+export.py against the committed fuel.db + eu.db before uploading, or it would
+deploy a dataless site, and its deploy job (needs: build) only deploys.
 
 Dashboard: static HTML + Chart.js 4.4.1 + Leaflet 1.9.4 in site/, no framework
 and no build step, served by GH Pages, reading only site/data/*.json. Dark
@@ -212,6 +232,11 @@ stays tracked: it is documentation, even though export.py rewrites it each run.
 GITHUB_TOKEN-authored pushes don't trigger other workflows' push triggers, so
 poll.yml can't rely on pages.yml firing after its commit. It has its own deploy
 job instead, sharing the "pages" concurrency group.
+
+In both workflows, upload-pages-artifact stays in the job that ran export.py,
+and deploy-pages runs alone in a separate job with needs:. Never merge them
+back into one job (the artifact race above), and never move the upload into
+the deploy job (no JSON there).
 
 Report-volume reality check
 

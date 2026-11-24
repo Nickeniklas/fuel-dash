@@ -22,8 +22,8 @@ Design notes: [docs/PLAN.md](docs/PLAN.md) · Source contracts: [docs/SCRAPER.md
 2. `eu_bulletin.py` downloads the EU Weekly Oil Bulletin workbook and upserts
    official national weekly prices into `eu.db`.
 3. `export.py` reads both databases and writes the JSON the dashboard fetches.
-4. The workflow commits the two databases back to `main` and deploys `site/`
-   to GitHub Pages in the same run.
+4. The workflow commits the two databases back to `main`, uploads `site/` as
+   the Pages artifact, and a follow-up job deploys it to GitHub Pages.
 
 The page shows a cheapest-first price table, a map, an area median chart with
 the Finnish national average overlaid, a 2005-onwards long-term context chart,
@@ -90,10 +90,14 @@ The dashboard in `site/` is `index.html`, `style.css` and `app.js` — no
 framework and no build step, with Chart.js and Leaflet from pinned CDN URLs.
 It reads only the exported JSON.
 
-`.github/workflows/poll.yml` runs the cron end to end in a single job, and
-`pages.yml` covers manual pushes that touch `site/`. The exported JSON is
-gitignored and regenerated on every run, so both workflows export before
-uploading the Pages artifact.
+`.github/workflows/poll.yml` runs the cron end to end (a `poll` job that
+polls, exports, commits and uploads the Pages artifact, then a `deploy` job),
+and `pages.yml` covers manual pushes that touch `site/` (`build` → `deploy`).
+The exported JSON is gitignored and regenerated on every run, so both
+workflows export before uploading the Pages artifact. Deploy is its own job
+because `deploy-pages` can race the artifact upload when they share one
+(actions/deploy-pages#451); it also means "Re-run failed jobs" reruns only the
+deploy.
 
 ## Limitations
 

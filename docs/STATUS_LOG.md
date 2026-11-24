@@ -6,6 +6,18 @@ date is verbatim from `CLAUDE.md` as it stood before the 2026-11-09 cleanup
 Current state lives in `CLAUDE.md`; the longer dated build narrative lives in
 the "Build order" and "Resolved" sections of `docs/PLAN.md`.
 
+## 2026-11-24
+
+Pages deploy split into its own job in both workflows. `deploy-pages@v5`
+intermittently failed with "No artifacts named github-pages were found" right
+after a successful `upload-pages-artifact@v5` in the same job (upstream race,
+actions/deploy-pages#451). `poll.yml` is now `poll` (poll, export, commit,
+upload artifact) → `deploy` (`needs: poll`); `pages.yml` is `build` →
+`deploy`. The upload stays with `export.py` because the JSON is gitignored and
+exists only in that runner. "Re-run failed jobs" now reruns only the deploy.
+Entries below that say "deploys Pages from the same job" describe the earlier
+layout.
+
 ## 2026-11-09
 
 CLAUDE.md cleanup: dated status text moved here; current sections re-verified
